@@ -1,0 +1,9 @@
+*.prof
+pgo_profiles/
+pgo_results/
+.idea/
+.cursor/
+memory-bank/private/
+.cursor/README.md
+.cursor/templates/
+.cursor/rules/
