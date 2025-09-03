@@ -1,0 +1,27 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/arnonrgo/immutable
+cpu: Apple M2 Pro
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N1-12      	12998565	        95.84 ns/op	     104 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N1-12      	10773579	        98.58 ns/op	     104 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N1-12      	13023699	        98.45 ns/op	     104 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N2-12      	10702842	       122.9 ns/op	     136 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N2-12      	10601486	       117.9 ns/op	     136 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N2-12      	11211512	       118.2 ns/op	     136 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N4-12      	 7885189	       165.8 ns/op	     200 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N4-12      	 7021438	       162.2 ns/op	     200 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N4-12      	 7417531	       152.9 ns/op	     200 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N8-12      	 5375890	       243.4 ns/op	     328 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N8-12      	 5113096	       253.9 ns/op	     328 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/InitialFlush/N8-12      	 4975413	       262.0 ns/op	     328 B/op	       4 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N2-12      	 3967312	       330.5 ns/op	     272 B/op	       9 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N2-12      	 4108021	       261.8 ns/op	     272 B/op	       9 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N2-12      	 4763406	       245.2 ns/op	     272 B/op	       9 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N4-12      	 3411511	       346.5 ns/op	     464 B/op	      10 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N4-12      	 3559462	       343.7 ns/op	     464 B/op	      10 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N4-12      	 3553017	       338.0 ns/op	     464 B/op	      10 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N8-12      	 2230874	       546.4 ns/op	     848 B/op	      11 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N8-12      	 2175144	       545.2 ns/op	     848 B/op	      11 allocs/op
+BenchmarkSmallMap_BatchBuilder/UpdateWithinThreshold/N8-12      	 2204332	       538.6 ns/op	     848 B/op	      11 allocs/op
+PASS
+ok  	github.com/arnonrgo/immutable	33.798s

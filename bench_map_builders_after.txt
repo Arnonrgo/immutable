@@ -1,0 +1,48 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/arnonrgo/immutable
+cpu: Apple M2 Pro
+BenchmarkBatchMapBuilder/Size100_Batch16-12         	   69556	     20400 ns/op	   13760 B/op	     421 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch16-12         	   77892	     18058 ns/op	   13760 B/op	     421 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch16-12         	   55058	     19857 ns/op	   13760 B/op	     421 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12         	   60661	     20178 ns/op	   21349 B/op	     428 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12         	   59196	     21021 ns/op	   21349 B/op	     428 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12         	   63890	     20073 ns/op	   21349 B/op	     428 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12         	   45726	     30586 ns/op	   42819 B/op	     430 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12         	   42970	     26028 ns/op	   42819 B/op	     430 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12         	   46056	     29117 ns/op	   42819 B/op	     430 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12        	  132966	      9581 ns/op	    9109 B/op	     107 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12        	  129981	     10916 ns/op	    9109 B/op	     107 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12        	   96714	     10522 ns/op	    9109 B/op	     107 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12        	   10000	    206232 ns/op	  110964 B/op	    3993 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12        	    9603	    149794 ns/op	  110963 B/op	    3993 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12        	    9027	    155931 ns/op	  110963 B/op	    3993 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12        	    7478	    163000 ns/op	  118553 B/op	    4000 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12        	    8343	    174167 ns/op	  118554 B/op	    4000 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12        	    7418	    159162 ns/op	  118553 B/op	    4000 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12        	    5755	    176478 ns/op	  140601 B/op	    4002 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12        	    9272	    118781 ns/op	  140593 B/op	    4002 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12        	   10000	    137363 ns/op	  140595 B/op	    4002 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12       	    9138	    135460 ns/op	  186095 B/op	    4098 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12       	    8845	    138007 ns/op	  186095 B/op	    4098 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12       	    9460	    131379 ns/op	  186094 B/op	    4098 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12       	     924	   1301212 ns/op	 1148896 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12       	     938	   1273658 ns/op	 1148918 B/op	   45115 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12       	     950	   1300901 ns/op	 1148922 B/op	   45115 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12       	     957	   1264542 ns/op	 1156450 B/op	   45121 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12       	     936	   1279052 ns/op	 1156455 B/op	   45121 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12       	     957	   1246184 ns/op	 1156451 B/op	   45121 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12       	     775	   1487818 ns/op	 1178859 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12       	     800	   1445434 ns/op	 1178861 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12       	     847	   1455439 ns/op	 1178831 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12      	     824	   1457202 ns/op	 1224341 B/op	   45221 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12      	     852	   1447609 ns/op	 1224342 B/op	   45221 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12      	     829	   1585637 ns/op	 1224331 B/op	   45221 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12 	     877	   1421676 ns/op	 1178836 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12 	     861	   1393005 ns/op	 1178853 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12 	     882	   1404949 ns/op	 1178843 B/op	   45125 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12         	     878	   1379250 ns/op	 1215215 B/op	   45115 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12         	     878	   1381646 ns/op	 1215210 B/op	   45115 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12         	     876	   1385240 ns/op	 1215190 B/op	   45114 allocs/op
+PASS
+ok  	github.com/arnonrgo/immutable	62.639s
