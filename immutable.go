@@ -42,33 +42,53 @@
 package immutable
 
 import (
-	"cmp"
 	"fmt"
 	"math/bits"
 	"reflect"
 	"sort"
 	"strings"
+
+	"golang.org/x/exp/constraints"
+)
+
+const (
+	// listSliceThreshold is the threshold at which a list will be converted
+	// from a slice-based implementation to a trie-based one.
+	listSliceThreshold = 32
 )
 
 // List is a dense, ordered, indexed collections. They are analogous to slices
-// in Go. They can be updated by appending to the end of the list, prepending
-// values to the beginning of the list, or updating existing indexes in the
-// list.
+// in Go. A List is implemented as a relaxed-radix-balanced tree. The zero value
+// of a List is an empty list. A list is safe for concurrent use.
+// For smaller lists (under listSliceThreshold elements), it uses a slice internally
+// for better performance, and will transparently switch to a trie for larger lists.
 type List[T any] struct {
 	root   listNode[T] // root node
-	origin int         // offset to zero index element - USED ONLY FOR TRIE
+	origin int         // offset to zero index element
 	size   int         // total number of elements in use
 }
 
 // NewList returns a new empty instance of List.
 func NewList[T any](values ...T) *List[T] {
-	l := &List[T]{
-		root: &listSliceNode[T]{elements: make([]T, 0, len(values))},
+	if len(values) > listSliceThreshold {
+		l := &List[T]{
+			root:   &listLeafNode[T]{},
+			origin: 0,
+			size:   0,
+		}
+		for _, value := range values {
+			l = l.append(value, true)
+		}
+		return l
 	}
-	if len(values) > 0 {
-		l = l.appendSlice(values, false)
+
+	// For small lists, use the slice-based implementation.
+	newValues := make([]T, len(values))
+	copy(newValues, values)
+	return &List[T]{
+		root: &listSliceNode[T]{elements: newValues},
+		size: len(values),
 	}
-	return l
 }
 
 // clone returns a copy of the list.
@@ -101,9 +121,9 @@ func (l *List[T]) Get(index int) T {
 	return l.root.get(l.origin + index)
 }
 
-// Set returns a copy of the list with the element at the given index set to
-// the new value. A new list is returned, even if the new value is the same as
-// the old value. Panics if the index is out of bounds.
+// Set returns a new list with value set at index. Similar to slices, this
+// method will panic if index is below zero or if the index is greater than
+// or equal to the list size.
 func (l *List[T]) Set(index int, value T) *List[T] {
 	return l.set(index, value, false)
 }
@@ -132,152 +152,82 @@ func (l *List[T]) set(index int, value T, mutable bool) *List[T] {
 	return other
 }
 
-// Append returns a copy of the list with the value appended to the end.
+// Append returns a new list with value added to the end of the list.
 func (l *List[T]) Append(value T) *List[T] {
 	return l.append(value, false)
 }
 
 func (l *List[T]) append(value T, mutable bool) *List[T] {
 	// If it's a slice node and there's room, append to the slice.
-	if sliceNode, ok := l.root.(*listSliceNode[T]); ok && l.size < listSliceThreshold {
-		newElements := make([]T, l.size+1)
-		copy(newElements, sliceNode.elements)
-		newElements[l.size] = value
-
-		other := l
-		if !mutable {
-			other = l.clone()
-		}
-		other.root = &listSliceNode[T]{elements: newElements}
-		other.size++
-		return other
-	}
-
-	// If we need to convert from slice to trie
 	if sliceNode, ok := l.root.(*listSliceNode[T]); ok {
-		// Convert the existing slice to a trie first
-		trieRoot := sliceNode.toTrie(true) // mutable for efficiency
-		tempList := &List[T]{root: trieRoot, size: l.size, origin: 0}
-		// Then append the new value to the trie
-		return tempList.append(value, mutable)
-	}
-
-	other := l
-	if !mutable {
-		other = l.clone()
-	}
-
-	// Expand tree if we are at capacity.
-	if l.origin+l.size >= l.cap() {
-		// Find parent of last element.
-		var stack [32]*listBranchNode[T]
-		var depth int
-		parent := l.root
-		for ; parent.depth() > 1; depth++ {
-			p := parent.(*listBranchNode[T])
-			stack[depth] = p
-			parent = p.children[(l.origin+l.size-1)>>(parent.depth()*listNodeBits)&listNodeMask]
-		}
-
-		// Create a new branch and add the last element's node.
-		newParent := &listBranchNode[T]{d: parent.depth()}
-		newParent.children[((l.origin+l.size-1)>>(parent.depth()*listNodeBits))&listNodeMask] = parent
-		newParent.children[((l.origin+l.size)>>(parent.depth()*listNodeBits))&listNodeMask] = newListNode[T](parent.depth() - 1)
-
-		// Walk up the stack and replace the parents.
-		for ; depth > 0; depth-- {
-			p := stack[depth-1]
-			var newP *listBranchNode[T]
-			if mutable {
-				newP = p
-			} else {
-				tmp := *p
-				newP = &tmp
-			}
-			newP.children[((l.origin+l.size-1)>>(p.depth()*listNodeBits))&listNodeMask] = newParent
-			newParent = newP
-		}
-
-		// If we are at the root then check if we need to expand the root.
-		if l.root.depth() < newParent.depth() {
-			other.root = newParent
-		} else {
-			newRoot := &listBranchNode[T]{d: newParent.depth() + 1}
-			newRoot.children[0] = newParent
-			other.root = newRoot
-		}
-	}
-
-	// Set the value at the end of the list.
-	other.size++
-	other.root = other.root.set(l.origin+l.size, value, mutable)
-	return other
-}
-
-func (l *List[T]) appendSlice(values []T, mutable bool) *List[T] {
-	if len(values) == 0 {
-		return l
-	}
-
-	other := l
-	if !mutable {
-		other = l.clone()
-	}
-
-	// Handle slice node case
-	if sliceNode, ok := other.root.(*listSliceNode[T]); ok {
-		newSize := l.size + len(values)
-		if newSize <= listSliceThreshold {
-			newElements := make([]T, newSize)
+		if l.size < listSliceThreshold {
+			newElements := make([]T, l.size+1)
 			copy(newElements, sliceNode.elements)
-			copy(newElements[l.size:], values)
+			newElements[l.size] = value
+
+			other := l
+			if !mutable {
+				other = l.clone()
+			}
 			other.root = &listSliceNode[T]{elements: newElements}
-			other.size = newSize
+			other.size++
 			return other
 		}
 
-		// Convert to trie if threshold is exceeded
-		trieRoot := sliceNode.toTrie(true)
-		other.root = trieRoot
-		other.origin = 0
+		// If we are at the threshold, we need to convert to a trie.
+		trieRoot := sliceNode.toTrie(true) // mutable for efficiency
+		tempList := &List[T]{root: trieRoot, size: l.size, origin: 0}
+		return tempList.append(value, mutable) // Now append to the new trie-based list
 	}
 
-	// Batch append to the trie
-	for _, value := range values {
-		other = other.append(value, true) // mutable for efficiency
+	// Standard trie-based append logic
+	other := l
+	if !mutable {
+		other = l.clone()
 	}
+
+	// Expand list to the right if no slots remain.
+	if other.size+other.origin >= l.cap() {
+		newRoot := &listBranchNode[T]{d: other.root.depth() + 1}
+		newRoot.children[0] = other.root
+		other.root = newRoot
+	}
+
+	// Increase size and set the last element to the new value.
+	other.size++
+	other.root = other.root.set(other.origin+other.size-1, value, mutable)
 	return other
 }
 
-// Prepend returns a copy of the list with the value prepended to the beginning.
+// Prepend returns a new list with value(s) added to the beginning of the list.
 func (l *List[T]) Prepend(value T) *List[T] {
 	return l.prepend(value, false)
 }
 
 func (l *List[T]) prepend(value T, mutable bool) *List[T] {
 	// If it's a slice node and there's room, prepend to the slice.
-	if sliceNode, ok := l.root.(*listSliceNode[T]); ok && l.size < listSliceThreshold {
-		newElements := make([]T, l.size+1)
-		newElements[0] = value
-		copy(newElements[1:], sliceNode.elements)
-
-		other := l
-		if !mutable {
-			other = l.clone()
-		}
-		other.root = &listSliceNode[T]{elements: newElements}
-		other.size++
-		return other
-	}
-
-	// If we need to convert from slice to trie
 	if sliceNode, ok := l.root.(*listSliceNode[T]); ok {
-		trieRoot := sliceNode.toTrie(true)
+		if l.size < listSliceThreshold {
+			newElements := make([]T, l.size+1)
+			newElements[0] = value
+			copy(newElements[1:], sliceNode.elements)
+
+			other := l
+			if !mutable {
+				other = l.clone()
+			}
+			other.root = &listSliceNode[T]{elements: newElements}
+			other.size++
+			return other
+		}
+
+		// If we are at the threshold, we need to convert to a trie.
+		trieRoot := sliceNode.toTrie(true) // mutable for efficiency
 		tempList := &List[T]{root: trieRoot, size: l.size, origin: 0}
-		return tempList.prepend(value, mutable)
+		return tempList.prepend(value, mutable) // Now prepend to the new trie-based list
 	}
 
-	// Standard trie prepend logic
+	// Standard trie-based prepend logic
 	other := l
 	if !mutable {
 		other = l.clone()
@@ -298,8 +248,13 @@ func (l *List[T]) prepend(value T, mutable bool) *List[T] {
 	return other
 }
 
-// Slice returns a copy of the list with the given range of elements.
-// The original list is unmodified. Panics if the indexes are out of bounds or if start > end.
+// Slice returns a new list of elements between start index and end index.
+// Similar to slices, this method will panic if start or end are below zero or
+// greater than the list size. A panic will also occur if start is greater than
+// end.
+//
+// Unlike Go slices, references to inaccessible elements will be automatically
+// removed so they can be garbage collected.
 func (l *List[T]) Slice(start, end int) *List[T] {
 	return l.slice(start, end, false)
 }
@@ -319,17 +274,13 @@ func (l *List[T]) slice(start, end int, mutable bool) *List[T] {
 		return l
 	}
 
-	// Handle slice node case
 	if sliceNode, ok := l.root.(*listSliceNode[T]); ok {
-		newElements := sliceNode.elements[start:end]
-		// Important: we need to copy the slice to maintain immutability guarantee
-		// if the underlying array is shared.
-		copiedElements := make([]T, len(newElements))
-		copy(copiedElements, newElements)
+		newElements := make([]T, end-start)
+		copy(newElements, sliceNode.elements[start:end])
 
 		return &List[T]{
-			root: &listSliceNode[T]{elements: copiedElements},
-			size: len(copiedElements),
+			root: &listSliceNode[T]{elements: newElements},
+			size: end - start,
 		}
 	}
 
@@ -377,15 +328,11 @@ type ListBuilder[T any] struct {
 
 // NewListBuilder returns a new instance of ListBuilder.
 func NewListBuilder[T any]() *ListBuilder[T] {
-	return &ListBuilder[T]{
-		list: &List[T]{
-			root: &listSliceNode[T]{elements: make([]T, 0)},
-		},
-	}
+	return &ListBuilder[T]{list: NewList[T]()}
 }
 
-// List returns the underlying list. Only call once.
-// Builder is invalid after call. Will panic on second invocation.
+// List returns the current copy of the list.
+// The builder should not be used again after the list after this call.
 func (b *ListBuilder[T]) List() *List[T] {
 	assert(b.list != nil, "immutable.ListBuilder.List(): duplicate call to fetch list")
 	list := b.list
@@ -406,28 +353,28 @@ func (b *ListBuilder[T]) Get(index int) T {
 	return b.list.Get(index)
 }
 
-// Set sets the value of the given index. See List.Set() for additional details.
+// Set updates the value at the given index. Similar to slices, this method will
+// panic if index is below zero or if the index is greater than or equal to the
+// list size.
 func (b *ListBuilder[T]) Set(index int, value T) {
 	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
 	b.list = b.list.set(index, value, true)
 }
 
-// Append appends a value to the end of the list. See List.Append() for
-// additional details.
+// Append adds value to the end of the list.
 func (b *ListBuilder[T]) Append(value T) {
 	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
 	b.list = b.list.append(value, true)
 }
 
-// Prepend prepends a value to the beginning of the list. See List.Prepend()
-// for additional details.
+// Prepend adds value to the beginning of the list.
 func (b *ListBuilder[T]) Prepend(value T) {
 	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
 	b.list = b.list.prepend(value, true)
 }
 
-// Slice returns a copy of the list with the given range of elements.
-// See List.Slice() for additional details.
+// Slice updates the list with a sublist of elements between start and end index.
+// See List.Slice() for more details.
 func (b *ListBuilder[T]) Slice(start, end int) {
 	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
 	b.list = b.list.slice(start, end, true)
@@ -444,13 +391,9 @@ const (
 	listNodeBits = 5
 	listNodeSize = 1 << listNodeBits
 	listNodeMask = listNodeSize - 1
-
-	// Threshold to convert from slice to trie.
-	// Must be a power of 2 and >= listNodeSize.
-	listSliceThreshold = 32
 )
 
-// listNode represents either a branch or leaf node in a List.
+// A list node can be a branch or a leaf.
 type listNode[T any] interface {
 	depth() uint
 	get(index int) T
@@ -666,109 +609,28 @@ func (n *listLeafNode[T]) deleteBefore(index int, mutable bool) listNode[T] {
 
 // deleteAfter returns a new node with all elements after index removed.
 func (n *listLeafNode[T]) deleteAfter(index int, mutable bool) listNode[T] {
-	idx := index & listNodeMask
-	mask := (uint32(1) << (idx + 1)) - 1
-	if n.occupied&^mask == 0 {
-		return n // no-op
-	}
-
-	other := n
-	if !mutable {
-		tmp := *n
-		other = &tmp
-	}
-
-	other.occupied &^= mask
-	return other
-}
-
-// listSliceNode is a leaf node that stores elements in a simple slice.
-// This is used for small lists to avoid the overhead of the trie structure.
-type listSliceNode[T any] struct {
-	elements []T
-}
-
-func (n *listSliceNode[T]) depth() uint { return 0 }
-
-func (n *listSliceNode[T]) get(index int) T {
-	return n.elements[index]
-}
-
-func (n *listSliceNode[T]) set(index int, v T, mutable bool) listNode[T] {
-	// If mutable, we can modify in-place.
-	if mutable {
-		n.elements[index] = v
+	if !n.containsAfter(index) {
 		return n
 	}
 
-	// Otherwise, create a new slice and copy elements.
-	newElements := make([]T, len(n.elements))
-	copy(newElements, n.elements)
-	newElements[index] = v
-	return &listSliceNode[T]{elements: newElements}
-}
-
-// These methods are not meant to be called directly on a slice node
-// as they are related to the trie structure. They return the node
-// itself to satisfy the interface, but the main List methods will
-// handle the logic.
-func (n *listSliceNode[T]) containsBefore(index int) bool { return true }
-func (n *listSliceNode[T]) containsAfter(index int) bool  { return true }
-func (n *listSliceNode[T]) deleteBefore(index int, mutable bool) listNode[T] {
-	return n // No-op, handled by List.Slice
-}
-func (n *listSliceNode[T]) deleteAfter(index int, mutable bool) listNode[T] {
-	return n // No-op, handled by List.Slice
-}
-
-// toTrie converts a listSliceNode to a trie-based structure (listBranchNode)
-// using an iterative, bottom-up approach to prevent stack overflow.
-func (n *listSliceNode[T]) toTrie(mutable bool) listNode[T] {
-	numElements := len(n.elements)
-	if numElements == 0 {
-		return &listLeafNode[T]{}
-	}
-
-	// Phase 1: Create leaf nodes from the slice elements.
-	var leaves []listNode[T]
-	for i := 0; i < numElements; i += listNodeSize {
-		end := i + listNodeSize
-		if end > numElements {
-			end = numElements
+	idx := index & listNodeMask
+	var other *listLeafNode[T]
+	if mutable {
+		other = n
+		var empty T
+		for i := idx + 1; i < len(n.children); i++ {
+			other.children[i] = empty
 		}
-		chunk := n.elements[i:end]
-
-		leaf := &listLeafNode[T]{}
-		copy(leaf.children[:], chunk)
-		// Set the occupied bitmask for the elements present in this leaf.
-		leaf.occupied = (uint32(1) << len(chunk)) - 1
-		leaves = append(leaves, leaf)
+	} else {
+		other = &listLeafNode[T]{occupied: n.occupied}
+		copy(other.children[:idx+1][:], n.children[:idx+1][:])
 	}
-
-	// Phase 2: Iteratively create parent branch nodes until a single root is left.
-	nodes := leaves
-	depth := uint(1)
-	for len(nodes) > 1 {
-		var parents []listNode[T]
-		for i := 0; i < len(nodes); i += listNodeSize {
-			end := i + listNodeSize
-			if end > len(nodes) {
-				end = len(nodes)
-			}
-			chunk := nodes[i:end]
-
-			parent := &listBranchNode[T]{d: depth}
-			copy(parent.children[:], chunk)
-			parents = append(parents, parent)
-		}
-		nodes = parents
-		depth++
-	}
-
-	return nodes[0]
+	// Set bits after idx to 0. idx < 31 because n.containsAfter(index) == true.
+	other.occupied &= (1 << (idx + 1)) - 1
+	return other
 }
 
-// ListIterator represents an iterator over a list.
+// ListIterator represents an ordered iterator over a list.
 type ListIterator[T any] struct {
 	list  *List[T] // source list
 	index int      // current index position
@@ -823,6 +685,13 @@ func (itr *ListIterator[T]) Next() (index int, value T) {
 		return -1, empty
 	}
 
+	// Handle slice node case
+	if sliceNode, ok := itr.list.root.(*listSliceNode[T]); ok {
+		index, value = itr.index, sliceNode.elements[itr.index]
+		itr.index++
+		return index, value
+	}
+
 	// Retrieve current index & value.
 	elem := &itr.stack[itr.depth]
 	index, value = itr.index, elem.node.(*listLeafNode[T]).children[elem.index]
@@ -852,6 +721,13 @@ func (itr *ListIterator[T]) Prev() (index int, value T) {
 		return -1, empty
 	}
 
+	// Handle slice node case
+	if sliceNode, ok := itr.list.root.(*listSliceNode[T]); ok {
+		index, value = itr.index, sliceNode.elements[itr.index]
+		itr.index--
+		return index, value
+	}
+
 	// Retrieve current index & value.
 	elem := &itr.stack[itr.depth]
 	index, value = itr.index, elem.node.(*listLeafNode[T]).children[elem.index]
@@ -875,6 +751,11 @@ func (itr *ListIterator[T]) Prev() (index int, value T) {
 // seek positions the stack to the given index from the current depth.
 // Elements and indexes below the current depth are assumed to be correct.
 func (itr *ListIterator[T]) seek(index int) {
+	// If it's a slice-based list, there's no stack to seek.
+	if _, ok := itr.list.root.(*listSliceNode[T]); ok {
+		return
+	}
+
 	// Iterate over each level until we reach a leaf node.
 	for {
 		elem := &itr.stack[itr.depth]
@@ -900,7 +781,7 @@ type listIteratorElem[T any] struct {
 // Size thresholds for each type of branch node.
 const (
 	maxArrayMapSize      = 8
-	maxBitmapIndexedSize = 16
+	maxBitmapIndexedSize = 24
 )
 
 // Segment bit shifts within the map tree.
@@ -1264,20 +1145,16 @@ func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uin
 	// Convert to a hash-array node once we exceed the max bitmap size.
 	// Copy each node based on their bit position within the bitmap.
 	if !exists && len(n.nodes) > maxBitmapIndexedSize {
-		var newNodes [mapNodeSize]mapNode[K, V]
-		var count uint
-		for i := uint(0); i < mapNodeSize; i++ {
+		var other mapHashArrayNode[K, V]
+		for i := uint(0); i < uint(len(other.nodes)); i++ {
 			if n.bitmap&(uint32(1)<<i) != 0 {
-				newNodes[i] = n.nodes[count]
-				count++
+				other.nodes[i] = n.nodes[other.count]
+				other.count++
 			}
 		}
-		newNodes[keyHashFrag] = newNode
-		count++
-		return &mapHashArrayNode[K, V]{
-			count: count,
-			nodes: &newNodes,
-		}
+		other.nodes[keyHashFrag] = newNode
+		other.count++
+		return &other
 	}
 
 	// Update in-place if mutable.
@@ -1370,8 +1247,14 @@ func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 // mapHashArrayNode is a map branch node that stores nodes in a fixed length
 // array. Child nodes are indexed by their index bit segment for the current depth.
 type mapHashArrayNode[K, V any] struct {
-	count uint                        // number of set nodes
-	nodes *[mapNodeSize]mapNode[K, V] // pointer to child node slots, may contain empties
+	count uint                       // number of set nodes
+	nodes [mapNodeSize]mapNode[K, V] // child node slots, may contain empties
+}
+
+// clone returns a shallow copy of n.
+func (n *mapHashArrayNode[K, V]) clone() *mapHashArrayNode[K, V] {
+	other := *n
+	return &other
 }
 
 // get returns the value for the given key.
@@ -1399,26 +1282,17 @@ func (n *mapHashArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32,
 	}
 
 	// Generate copy, if necessary.
-	if mutable {
-		// Update in-place
-		if node == nil {
-			n.count++
-		}
-		n.nodes[idx] = newNode
-		return n
-	} else {
-		// Create new array only when actually modifying
-		newNodes := *n.nodes // Copy array contents
-		newNodes[idx] = newNode
-		newCount := n.count
-		if node == nil {
-			newCount++
-		}
-		return &mapHashArrayNode[K, V]{
-			count: newCount,
-			nodes: &newNodes,
-		}
+	other := n
+	if !mutable {
+		other = n.clone()
 	}
+
+	// Update child node (and update size, if new).
+	if node == nil {
+		other.count++
+	}
+	other.nodes[idx] = newNode
+	return other
 }
 
 // delete returns a node with the given key removed. Returns the same node if
@@ -1442,7 +1316,7 @@ func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Has
 	// If we remove a node and drop below a threshold, convert back to bitmap indexed node.
 	if newNode == nil && n.count <= maxBitmapIndexedSize {
 		other := &mapBitmapIndexedNode[K, V]{nodes: make([]mapNode[K, V], 0, n.count-1)}
-		for i, child := range *n.nodes {
+		for i, child := range n.nodes {
 			if child != nil && uint32(i) != idx {
 				other.bitmap |= 1 << uint(i)
 				other.nodes = append(other.nodes, child)
@@ -1452,26 +1326,17 @@ func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Has
 	}
 
 	// Generate copy, if necessary.
-	if mutable {
-		// Update in-place
-		n.nodes[idx] = newNode
-		if newNode == nil {
-			n.count--
-		}
-		return n
-	} else {
-		// Create new array only when actually modifying
-		newNodes := *n.nodes // Copy array contents
-		newNodes[idx] = newNode
-		newCount := n.count
-		if newNode == nil {
-			newCount--
-		}
-		return &mapHashArrayNode[K, V]{
-			count: newCount,
-			nodes: &newNodes,
-		}
+	other := n
+	if !mutable {
+		other = n.clone()
 	}
+
+	// Return copy of node with child updated.
+	other.nodes[idx] = newNode
+	if newNode == nil {
+		other.count--
+	}
+	return other
 }
 
 // mapValueNode represents a leaf node with a single key/value pair.
@@ -2477,11 +2342,6 @@ type sortedMapIteratorElem[K, V any] struct {
 // Hasher hashes keys and checks them for equality.
 type Hasher[K any] interface {
 	// Computes a hash for key.
-	//
-	// SECURITY WARNING: A poor hash implementation can lead to performance
-	// degradation and make the map vulnerable to denial-of-service attacks
-	// (algorithmic complexity attacks). Implementations should ensure a good
-	// distribution of hash codes to avoid collisions.
 	Hash(key K) uint32
 
 	// Returns true if a and b are equal.
@@ -2607,15 +2467,12 @@ func (h *defaultHasher[K]) Equal(a, b K) bool {
 type Comparer[K any] interface {
 	// Returns -1 if a is less than b, returns 1 if a is greater than b,
 	// and returns 0 if a is equal to b.
-	//
-	// SECURITY WARNING: A slow or poorly implemented comparer can lead to
-	// severe performance degradation and make the sorted map vulnerable to
-	// denial-of-service attacks.
 	Compare(a, b K) int
 }
 
-// NewComparer returns a comparer for the given key type K.
-// If K is one of the built-in comparable types, a default comparer is returned.
+// NewComparer returns the built-in comparer for a given key type.
+// Note that only int-ish and string-ish types are supported, despite the 'comparable' constraint.
+// Attempts to use other types will result in a panic - users should define their own Comparers for these cases.
 func NewComparer[K any](key K) Comparer[K] {
 	// Attempt to use non-reflection based comparer first.
 	switch (any(key)).(type) {
@@ -2668,9 +2525,9 @@ func (c *defaultComparer[K]) Compare(i K, j K) int {
 	panic(fmt.Sprintf("immutable.defaultComparer: must set comparer for %T type", i))
 }
 
-// defaultCompare only operates on cmp.Ordered.
+// defaultCompare only operates on constraints.Ordered.
 // For other types, users should bring their own comparers
-func defaultCompare[K cmp.Ordered](i, j K) int {
+func defaultCompare[K constraints.Ordered](i, j K) int {
 	if i < j {
 		return -1
 	} else if i > j {
@@ -2710,4 +2567,81 @@ func assert(condition bool, message string) {
 	if !condition {
 		panic(message)
 	}
+}
+
+// A list node which is implemented as a slice. Used for small lists.
+type listSliceNode[T any] struct {
+	elements []T
+}
+
+func (n *listSliceNode[T]) depth() uint { return 0 }
+
+func (n *listSliceNode[T]) get(index int) T {
+	return n.elements[index]
+}
+
+func (n *listSliceNode[T]) set(index int, v T, mutable bool) listNode[T] {
+	if mutable {
+		n.elements[index] = v
+		return n
+	}
+	newElements := make([]T, len(n.elements))
+	copy(newElements, n.elements)
+	newElements[index] = v
+	return &listSliceNode[T]{elements: newElements}
+}
+
+// These methods are not used for listSliceNode but are required by the listNode interface.
+func (n *listSliceNode[T]) containsBefore(index int) bool { return true }
+func (n *listSliceNode[T]) containsAfter(index int) bool  { return true }
+func (n *listSliceNode[T]) deleteBefore(index int, mutable bool) listNode[T] {
+	// This might need a real implementation if slice is to support deletion.
+	return n
+}
+func (n *listSliceNode[T]) deleteAfter(index int, mutable bool) listNode[T] {
+	// This might need a real implementation if slice is to support deletion.
+	return n
+}
+
+// toTrie converts a listSliceNode to a trie-based structure.
+func (n *listSliceNode[T]) toTrie(mutable bool) listNode[T] {
+	numElements := len(n.elements)
+	if numElements == 0 {
+		return &listLeafNode[T]{}
+	}
+
+	// Phase 1: Create leaf nodes from the slice elements.
+	var leaves []listNode[T]
+	for i := 0; i < numElements; i += listNodeSize {
+		end := i + listNodeSize
+		if end > numElements {
+			end = numElements
+		}
+		chunk := n.elements[i:end]
+		leaf := &listLeafNode[T]{}
+		copy(leaf.children[:], chunk)
+		leaf.occupied = (uint32(1) << len(chunk)) - 1
+		leaves = append(leaves, leaf)
+	}
+
+	// Phase 2: Iteratively create parent branch nodes until a single root is left.
+	nodes := leaves
+	depth := uint(1)
+	for len(nodes) > 1 {
+		var parents []listNode[T]
+		for i := 0; i < len(nodes); i += listNodeSize {
+			end := i + listNodeSize
+			if end > len(nodes) {
+				end = len(nodes)
+			}
+			chunk := nodes[i:end]
+			parent := &listBranchNode[T]{d: depth}
+			copy(parent.children[:], chunk)
+			parents = append(parents, parent)
+		}
+		nodes = parents
+		depth++
+	}
+
+	return nodes[0]
 }

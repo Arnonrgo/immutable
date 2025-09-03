@@ -48,12 +48,28 @@ func (b *BatchListBuilder[T]) Flush() {
 		return
 	}
 
-	// Batch append all buffered values
-	for _, value := range b.buffer {
-		b.list = b.list.append(value, true) // mutable for performance
+	// Fast path: if underlying list is slice-backed, extend in one allocation.
+	if sliceNode, ok := b.list.root.(*listSliceNode[T]); ok {
+		newLen := b.list.size + len(b.buffer)
+		newElements := make([]T, newLen)
+		copy(newElements, sliceNode.elements)
+		copy(newElements[b.list.size:], b.buffer)
+		b.list.root = &listSliceNode[T]{elements: newElements}
+		b.list.size = newLen
+	} else {
+		// Fallback: append one-by-one using mutable trie path
+		for _, value := range b.buffer {
+			b.list = b.list.append(value, true) // mutable for performance
+		}
 	}
 
 	// Clear buffer (reuse capacity)
+	b.buffer = b.buffer[:0]
+}
+
+// Reset clears the builder state while retaining buffer capacity.
+func (b *BatchListBuilder[T]) Reset() {
+	b.list = NewList[T]()
 	b.buffer = b.buffer[:0]
 }
 
@@ -114,12 +130,156 @@ func (b *BatchMapBuilder[K, V]) Flush() {
 		return
 	}
 
-	// Batch set all buffered entries
-	for _, entry := range b.buffer {
-		b.m = b.m.set(entry.key, entry.value, true) // mutable for performance
+	// Fast path: if map is empty, build an array node in one shot with last-write-wins semantics.
+	if b.m.root == nil {
+		var dedup []mapEntry[K, V]
+		if len(b.buffer) <= maxArrayMapSize {
+			// Tiny buffer: use slice-based last-occurrence dedup without maps.
+			for i := len(b.buffer) - 1; i >= 0; i-- {
+				key := b.buffer[i].key
+				found := false
+				for _, e := range dedup {
+					if b.m.hasher != nil {
+						if b.m.hasher.Equal(e.key, key) {
+							found = true
+							break
+						}
+					} else {
+						if any(e.key) == any(key) {
+							found = true
+							break
+						}
+					}
+				}
+				if !found {
+					dedup = append(dedup, b.buffer[i])
+				}
+			}
+			// Reverse to restore original order of last occurrences
+			for i, j := 0, len(dedup)-1; i < j; i, j = i+1, j-1 {
+				dedup[i], dedup[j] = dedup[j], dedup[i]
+			}
+		} else {
+			// Larger buffer: map-based dedup
+			seen := make(map[K]struct{}, len(b.buffer))
+			for i := len(b.buffer) - 1; i >= 0; i-- {
+				e := b.buffer[i]
+				if _, ok := seen[e.key]; ok {
+					continue
+				}
+				seen[e.key] = struct{}{}
+				dedup = append(dedup, e)
+			}
+			for i, j := 0, len(dedup)-1; i < j; i, j = i+1, j-1 {
+				dedup[i], dedup[j] = dedup[j], dedup[i]
+			}
+		}
+		// Ensure hasher is set for Get operations
+		if b.m.hasher == nil && len(dedup) > 0 {
+			b.m.hasher = NewHasher(dedup[0].key)
+		}
+		// Install as array node
+		b.m.size = len(dedup)
+		b.m.root = &mapArrayNode[K, V]{entries: dedup}
+	} else if arr, ok := b.m.root.(*mapArrayNode[K, V]); ok {
+		// Small-structure fast path: stay in array node if total entries remain under threshold.
+		// Build last-write-wins overrides and first-seen order for new keys (slice-based for tiny buffers).
+		// Stage last-occurrence per key as slice for tiny buffers; fallback to map for larger buffers.
+		var last []mapEntry[K, V]
+		if len(b.buffer) <= maxArrayMapSize {
+			for i := len(b.buffer) - 1; i >= 0; i-- {
+				e := b.buffer[i]
+				found := false
+				for _, le := range last {
+					if b.m.hasher != nil {
+						if b.m.hasher.Equal(le.key, e.key) {
+							found = true
+							break
+						}
+					} else {
+						if any(le.key) == any(e.key) {
+							found = true
+							break
+						}
+					}
+				}
+				if !found {
+					last = append(last, e)
+				}
+			}
+			// Reverse to keep first-seen order among last-occurrences
+			for i, j := 0, len(last)-1; i < j; i, j = i+1, j-1 {
+				last[i], last[j] = last[j], last[i]
+			}
+		} else {
+			seenNew := make(map[K]struct{}, len(b.buffer))
+			for _, e := range b.buffer {
+				if _, ok := seenNew[e.key]; ok {
+					continue
+				}
+				seenNew[e.key] = struct{}{}
+				last = append(last, e)
+			}
+		}
+		// Track original keys
+		orig := make(map[K]struct{}, len(arr.entries))
+		for _, e := range arr.entries {
+			orig[e.key] = struct{}{}
+		}
+		// Copy existing and apply overrides from last
+		newEntries := make([]mapEntry[K, V], len(arr.entries))
+		copy(newEntries, arr.entries)
+		for i, e := range newEntries {
+			for _, le := range last {
+				// If key matches, override value
+				match := false
+				if b.m.hasher != nil {
+					match = b.m.hasher.Equal(e.key, le.key)
+				} else {
+					match = any(e.key) == any(le.key)
+				}
+				if match {
+					newEntries[i] = mapEntry[K, V]{key: e.key, value: le.value}
+					break
+				}
+			}
+		}
+		// Append truly new keys
+		toAppend := make([]mapEntry[K, V], 0)
+		for _, le := range last {
+			if _, existed := orig[le.key]; !existed {
+				toAppend = append(toAppend, le)
+			}
+		}
+		newCount := len(newEntries) + len(toAppend)
+		if newCount <= maxArrayMapSize {
+			newEntries = append(newEntries, toAppend...)
+			b.m.size = newCount
+			b.m.root = &mapArrayNode[K, V]{entries: newEntries}
+		} else {
+			// Fallback: set one-by-one using mutable path
+			for _, e := range b.buffer {
+				b.m = b.m.set(e.key, e.value, true)
+			}
+		}
+	} else {
+		// Fallback: set one-by-one using mutable path
+		for _, entry := range b.buffer {
+			b.m = b.m.set(entry.key, entry.value, true) // mutable for performance
+		}
 	}
 
 	// Clear buffer (reuse capacity)
+	b.buffer = b.buffer[:0]
+}
+
+// Reset clears the builder state while retaining buffer capacity.
+func (b *BatchMapBuilder[K, V]) Reset() {
+	var hasher Hasher[K]
+	if b.m != nil {
+		hasher = b.m.hasher
+	}
+	b.m = NewMap[K, V](hasher)
 	b.buffer = b.buffer[:0]
 }
 

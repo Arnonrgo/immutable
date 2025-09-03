@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -61,6 +62,49 @@ func BenchmarkScaling(b *testing.B) {
 				for j := 0; j < size; j++ {
 					m = m.Set(j, j*2)
 				}
+			}
+		})
+	}
+}
+
+// BenchmarkSyncMap provides baseline numbers for Go's sync.Map
+func BenchmarkSyncMap(b *testing.B) {
+	sizes := []int{100, 1000, 10000, 100000}
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("Store_N%d", size), func(b *testing.B) {
+			var m sync.Map
+			for i := 0; i < size; i++ {
+				m.Store(i, i*2)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				m.Store(i%size, i)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Load_N%d", size), func(b *testing.B) {
+			var m sync.Map
+			for i := 0; i < size; i++ {
+				m.Store(i, i*2)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = m.Load(i % size)
+			}
+		})
+
+		b.Run(fmt.Sprintf("LoadOrStore_N%d", size), func(b *testing.B) {
+			var m sync.Map
+			for i := 0; i < size; i++ {
+				m.Store(i, i*2)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_, _ = m.LoadOrStore(i%size, i)
 			}
 		})
 	}
@@ -288,6 +332,166 @@ func BenchmarkRealWorldPatterns(b *testing.B) {
 	})
 }
 
+// Concurrent read benchmarks: immutable Map vs sync.Map
+func BenchmarkConcurrentReads(b *testing.B) {
+	const size = 100000
+
+	// immutable Map setup
+	imm := NewMap[int, int](nil)
+	for i := 0; i < size; i++ {
+		imm = imm.Set(i, i*2)
+	}
+
+	// sync.Map setup
+	var sm sync.Map
+	for i := 0; i < size; i++ {
+		sm.Store(i, i*2)
+	}
+
+	for _, goroutines := range []int{1, 2, 4, 8, 16} {
+		b.Run(fmt.Sprintf("ImmutableMap_%dG", goroutines), func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetParallelism(goroutines)
+			b.RunParallel(func(pb *testing.PB) {
+				i := 0
+				for pb.Next() {
+					_, _ = imm.Get(i % size)
+					i++
+				}
+			})
+		})
+
+		b.Run(fmt.Sprintf("SyncMap_%dG", goroutines), func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetParallelism(goroutines)
+			b.RunParallel(func(pb *testing.PB) {
+				i := 0
+				for pb.Next() {
+					_, _ = sm.Load(i % size)
+					i++
+				}
+			})
+		})
+	}
+}
+
+// Mixed read/write concurrent benchmarks
+func BenchmarkConcurrentMixed(b *testing.B) {
+	const size = 100000
+	// immutable Map setup
+	base := NewMap[int, int](nil)
+	for i := 0; i < size; i++ {
+		base = base.Set(i, i*2)
+	}
+	// sync.Map setup
+	var sm sync.Map
+	for i := 0; i < size; i++ {
+		sm.Store(i, i*2)
+	}
+
+	type mix struct{ readers, writers int }
+	mixes := []mix{{9, 1}, {7, 3}, {5, 5}}
+
+	for _, m := range mixes {
+		b.Run(fmt.Sprintf("Immutable_%dR_%dW", m.readers, m.writers), func(b *testing.B) {
+			b.ReportAllocs()
+			var wg sync.WaitGroup
+			wg.Add(m.readers + m.writers)
+			stop := make(chan struct{})
+
+			// Readers
+			for r := 0; r < m.readers; r++ {
+				go func() {
+					defer wg.Done()
+					i := 0
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+							_, _ = base.Get(i % size)
+							i++
+						}
+					}
+				}()
+			}
+			// Writers: copy-on-write; advance a shadow map
+			shadow := base
+			var mu sync.Mutex
+			for w := 0; w < m.writers; w++ {
+				go func() {
+					defer wg.Done()
+					i := 0
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+							mu.Lock()
+							shadow = shadow.Set(i%size, i)
+							mu.Unlock()
+							i++
+						}
+					}
+				}()
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _ = base.Get(i % size)
+			}
+			close(stop)
+			wg.Wait()
+		})
+
+		b.Run(fmt.Sprintf("SyncMap_%dR_%dW", m.readers, m.writers), func(b *testing.B) {
+			b.ReportAllocs()
+			var wg sync.WaitGroup
+			wg.Add(m.readers + m.writers)
+			stop := make(chan struct{})
+
+			for r := 0; r < m.readers; r++ {
+				go func() {
+					defer wg.Done()
+					i := 0
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+							_, _ = sm.Load(i % size)
+							i++
+						}
+					}
+				}()
+			}
+
+			for w := 0; w < m.writers; w++ {
+				go func() {
+					defer wg.Done()
+					i := 0
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+							sm.Store(i%size, i)
+							i++
+						}
+					}
+				}()
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _ = sm.Load(i % size)
+			}
+			close(stop)
+			wg.Wait()
+		})
+	}
+}
+
 // Phase 4 Enhanced Builder Benchmarks
 
 func BenchmarkBatchListBuilder(b *testing.B) {
@@ -444,6 +648,59 @@ func BenchmarkStreamingListBuilder_Operations(b *testing.B) {
 			builder := NewStreamingListBuilder[int](32, 0)
 			builder.Transform(data, func(x int) int { return x * 2 })
 			_ = builder.List()
+		}
+	})
+}
+
+// Small-structure Map builder benchmarks (array-node fast paths)
+func BenchmarkSmallMap_BatchBuilder(b *testing.B) {
+	sizes := []int{1, 2, 4, 8}
+
+	b.Run("InitialFlush", func(b *testing.B) {
+		for _, size := range sizes {
+			b.Run(fmt.Sprintf("N%d", size), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					builder := NewBatchMapBuilder[int, int](nil, size)
+					for j := 0; j < size; j++ {
+						builder.Set(j, j*2)
+					}
+					_ = builder.Map()
+				}
+			})
+		}
+	})
+
+	b.Run("UpdateWithinThreshold", func(b *testing.B) {
+		for _, size := range sizes {
+			if size < 2 {
+				continue
+			}
+			b.Run(fmt.Sprintf("N%d", size), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					// Start with size/2 existing entries
+					builder := NewBatchMapBuilder[int, int](nil, size)
+					for j := 0; j < size/2; j++ {
+						builder.Set(j, j)
+					}
+					m := builder.Map()
+
+					// Now flush remaining entries (updates + new) within threshold
+					builder2 := NewBatchMapBuilder[int, int](nil, size)
+					// attach existing map into builder2 by direct field move
+					builder2.m = m
+					// updates for first half
+					for j := 0; j < size/2; j++ {
+						builder2.Set(j, j*10)
+					}
+					// new keys
+					for j := size / 2; j < size; j++ {
+						builder2.Set(j, j*10)
+					}
+					_ = builder2.Map()
+				}
+			})
 		}
 	})
 }

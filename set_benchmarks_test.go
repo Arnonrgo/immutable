@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+// largeValueHasher provides a lightweight Hasher for LargeValue so Sets can use it as a key type.
+type largeValueHasher struct{}
+
+func (h *largeValueHasher) Hash(v LargeValue) uint32 {
+	// Fast, stable hash combining ID and Name; adequate for benchmarking.
+	var hash uint32 = uint32(v.ID)
+	for i := 0; i < len(v.Name); i++ {
+		hash = 31*hash + uint32(v.Name[i])
+	}
+	return hash
+}
+
+func (h *largeValueHasher) Equal(a, b LargeValue) bool {
+	// Consider values equal if IDs match for set semantics during benchmarks.
+	return a.ID == b.ID
+}
+
 // Benchmark Set operations to show they inherit Map optimizations
 func BenchmarkSet_Operations(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
@@ -95,7 +112,7 @@ func BenchmarkSet_LargeValues(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("LargeStruct/size-%d", size), func(b *testing.B) {
-			s := NewSet[LargeValue](nil) // Reuse our 1KB struct
+			s := NewSet[LargeValue](&largeValueHasher{}) // Reuse our 1KB struct
 			for i := 0; i < size; i++ {
 				s = s.Add(LargeValue{
 					ID:          i,

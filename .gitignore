@@ -7,3 +7,6 @@ memory-bank/private/
 .cursor/README.md
 .cursor/templates/
 .cursor/rules/
+
+# Memba per-developer user id
+.memba/.user_id
