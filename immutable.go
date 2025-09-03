@@ -42,13 +42,12 @@
 package immutable
 
 import (
+	"cmp"
 	"fmt"
 	"math/bits"
 	"reflect"
 	"sort"
 	"strings"
-
-	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -2525,9 +2524,9 @@ func (c *defaultComparer[K]) Compare(i K, j K) int {
 	panic(fmt.Sprintf("immutable.defaultComparer: must set comparer for %T type", i))
 }
 
-// defaultCompare only operates on constraints.Ordered.
+// defaultCompare only operates on cmp.Ordered.
 // For other types, users should bring their own comparers
-func defaultCompare[K constraints.Ordered](i, j K) int {
+func defaultCompare[K cmp.Ordered](i, j K) int {
 	if i < j {
 		return -1
 	} else if i > j {

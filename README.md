@@ -1,4 +1,4 @@
-Immutable [![release](https://img.shields.io/github/release/arnonrgo/immutable.svg)](https://pkg.go.dev/github.com/benbjohnson/immutable) ![test](https://github.com/arnonrgo/immutable/workflows/test/badge.svg) ![coverage](https://img.shields.io/codecov/c/github/arnonrgo/immutable/master.svg) ![license](https://img.shields.io/github/license/arnonrgo/immutable.svg)
+Immutable [![release](https://img.shields.io/github/release/arnonrgo/immutable.svg)](https://pkg.go.dev/github.com/arnonrgo/immutable) ![test](https://github.com/arnonrgo/immutable/workflows/test/badge.svg) ![coverage](https://img.shields.io/codecov/c/github/arnonrgo/immutable/master.svg) ![license](https://img.shields.io/github/license/arnonrgo/immutable.svg)
 =========
 
 This repository contains *generic* immutable collection types for Go. It includes
@@ -10,6 +10,8 @@ The collection types in this library are meant to mimic Go built-in collections
 such as`slice` and `map`. The primary usage difference between Go collections
 and `immutable` collections is that `immutable` collections always return a new
 collection on mutation so you will need to save the new reference.
+
+This project is a fork of [github.com/benbjohnson/immutable](https://github.com/benbjohnson/immutable) with additional performance enhancements and builder APIs.
 
 **Performance**: This library includes  batch builders that provide high accelaration for bulk operations (vs. discreet insert), with optimized memory usage 
 and automatic batching. Regular operations maintain ~2x overhead compared to Go's 
@@ -29,22 +31,17 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 **Memory Architecture Improvements:**
 - **Hybrid Data Structures**:
     - **List**: Uses a simple slice for small lists (< 32 elements) for up to 2x faster operations and ~85% less memory usage in common cases, transparently converting to a HAMT for larger sizes.
-    - **Map**: Employs a slice-based implementation for small maps (< 8 elements) to eliminate trie overhead for the most frequent use cases.
-- **Pointer-Based Array Sharing**: Eliminated 53% memory allocation bottleneck in `mapHashArrayNode.clone()`
+    - **Map**: Small-structure fast paths via builder initial flush and tiny array-node updates (≤ 8 keys); core Map remains HAMT.
+- **Pointer-Based Array Sharing (planned)**: Reduce allocations in `mapHashArrayNode.clone()` via pointer-backed children with copy-on-write
 - **Lazy Copy-on-Write**: Arrays shared via pointers until actual modification, reducing memory overhead by 6-8%
 - **Cache-Friendly Design**: Improved memory layout for better CPU cache utilization
 
-**Go Language Modernization (Go 1.21-1.24):**
-- **Built-in Functions**: Replaced custom utilities with `min()`, `max()`, and `clear()` for 18-100% performance improvements
-- **Standard Library Migration**: Moved from `golang.org/x/exp/constraints` to built-in `cmp` package (18% faster comparisons)
-- **Profile-Guided Optimization**: Automatic PGO support with `-pgo=auto` for 2-7% runtime improvements
-- **Swiss Tables**: Automatic 2-3% CPU improvement from Go 1.24 runtime enhancements
 
 ### **Batch Builders**
 
 **Complete High-Performance Builder Suite:**
 - **`BatchListBuilder`**: up 19x faster in tests (vs. discreet ops) bulk list construction with configurable batch sizes
-- **`BatchMapBuilder`**: 8% faster with 5.8% memory reduction for bulk map operations
+- **`BatchMapBuilder`**: Measured gains on bulk construction; biggest wins for initial tiny batches and small structures
 - **`BatchSetBuilder`** & **`BatchSortedSetBuilder`**: Efficient bulk set construction
 - **`StreamingListBuilder`** & **`StreamingMapBuilder`**: Auto-flush with functional operations (filter, transform)
 - **`SortedBatchBuilder`**: Optimized sorted map construction with optional sort maintenance
@@ -63,23 +60,6 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 - Edge case and error condition testing for all new builders
 - Large-scale performance validation (100-100K elements)
 
-### **Measured Performance Improvements**
-
-**Memory Efficiency:**
-- **6-8% reduction** in memory allocations for write operations
-- **53% allocation bottleneck eliminated** (mapHashArrayNode.clone)
-- **Exponential scaling benefits** for large value structures (10-100x for large objects)
-
-**CPU Performance:**
-- **Built-in function usage**: 18-100% faster than custom implementations
-- **Batch operations**: Up to 19x improvement for bulk list construction
-- **Map operations**: 8% faster with batched construction
-- **Overall runtime**: 4-10% improvement from Go 1.24 optimizations
-
-**Read Operations Preserved:**
-- **Zero allocation reads** maintained (12-20ns for maps vs 6-12ns for Go maps)
-- **Thread-safe concurrency** with no locks required
-- **Perfect immutability guarantees** preserved
 
 ### **Architectural Enhancements**
 
@@ -88,23 +68,6 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 - Structural sharing maintains thread safety
 - Zero-overhead abstractions (Sets inherit Map optimizations)
 
-**API Compatibility:**
-- **100% backward compatible** with original API
-- Enhanced builders available as opt-in performance features
-- Graceful fallbacks for invalid batch sizes
-
-### **Production Readiness**
-
-**Quality Assurance:**
-- All tests passing with comprehensive validation
-- Memory leak testing and profiling
-- Production-scale benchmarking (up to 100K elements)
-- Continuous integration with performance regression testing
-
-**Documentation:**
-- Complete performance guidelines and batch size recommendations
-- Practical examples for all new features
-- Migration guide for optimal performance usage
 
 
 ## List
@@ -569,4 +532,83 @@ _please_ open an issue first to discuss. All pull requests without a related
 issue will be closed immediately.
 
 Please submit issues relating to bugs & documentation improvements.
+
+
+### What's New (2025-09)
+
+- zero dependencies
+- Small-structure fast paths:
+  - List: Batch flush extends slice-backed lists in a single allocation
+  - Map: Empty-map batch flush builds an array node in one shot (last-write-wins); tiny array-node updates applied in-place when under threshold
+- New builder APIs:
+  - `(*BatchListBuilder).Reset()` and `(*BatchMapBuilder).Reset()` for builder reuse without reallocations
+- Concurrency:
+  - Added concurrent read benchmarks and mixed read/write benchmarks (immutable Map vs `sync.Map`)
+  - Added concurrency correctness tests (copy-on-write isolation under concurrent readers)
+
+### Current Performance Snapshot
+
+- Map Get (10K): immutable ~14.5 ns/op (0 allocs); builtin map ~6.8 ns/op; `sync.Map` Load ~20.3 ns/op
+- Map RandomSet (10K): ~595–687 ns/op, 1421 B/op, 7 allocs/op (after tuning)
+- Concurrent reads (ns/op, lower is better):
+  - 1G: immutable 3.53 vs `sync.Map` 6.03
+  - 4G: immutable 2.31 vs `sync.Map` 3.21
+  - 16G: immutable 2.39 vs `sync.Map` 3.24
+- Mixed read/write (ns/op):
+  - 90/10 (9R/1W): immutable 26.0 vs `sync.Map` 38.4
+  - 70/30 (7R/3W): immutable 24.6 vs `sync.Map` 65.0
+  - 50/50 (5R/5W): immutable 27.3 vs `sync.Map` 47.4
+
+### New APIs (Builders)
+
+```go
+// Reuse list builder across batches without reallocations
+lb := immutable.NewBatchListBuilder[int](64)
+// ... append/flush ...
+lb.Reset() // clears state, keeps capacity
+
+// Reuse map builder and retain hasher
+mb := immutable.NewBatchMapBuilder[string,int](nil, 64)
+// ... set/flush ...
+mb.Reset() // clears state, preserves hasher & buffer capacity
+```
+
+### Benchmarking & Profiling
+
+- Run all benchmarks with allocations:
+```bash
+go test -bench=. -benchmem -count=3 ./...
+```
+
+- Profile a representative write-heavy benchmark:
+```bash
+# CPU and memory profiles (example: Map RandomSet, size=10K)
+go test -bench=BenchmarkMap_RandomSet/size-10000 -benchmem -run="^$" \
+  -cpuprofile=cpu.prof -memprofile=mem.prof -count=1
+
+# Inspect hotspots
+go tool pprof -top cpu.prof
+go tool pprof -top -sample_index=alloc_space mem.prof
+```
+
+Optional: Enable PGO locally
+```bash
+# Generate a profile and write default.pgo
+go test -bench=. -run="^$" -cpuprofile=cpu.prof -count=1
+go tool pprof -proto cpu.prof > cpu.pb.gz
+go tool pgo -compile=local -o default.pgo cpu.pb.gz
+
+# Use the profile for builds/tests (Go 1.21+)
+go test -bench=. -benchmem -count=3 -pgo=auto ./...
+```
+
+- Compare immutable vs `sync.Map` concurrent reads:
+```bash
+go test -bench=BenchmarkConcurrentReads -benchmem -run="^$" -count=1
+```
+
+- Mixed workload (reads/writes):
+```bash
+go test -bench=BenchmarkConcurrentMixed -benchmem -run="^$" -count=1
+```
 
