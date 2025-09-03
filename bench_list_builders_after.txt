@@ -1,0 +1,51 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/arnonrgo/immutable
+cpu: Apple M2 Pro
+BenchmarkBatchListBuilder/Size100_Batch16-12         	 1263090	       940.9 ns/op	    3984 B/op	      18 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch16-12         	 1266192	       965.4 ns/op	    3984 B/op	      18 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch16-12         	 1273482	      1058 ns/op	    3984 B/op	      18 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12         	 1413100	       732.8 ns/op	    2888 B/op	      12 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12         	 1649900	       717.9 ns/op	    2888 B/op	      12 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12         	 1594340	       716.3 ns/op	    2888 B/op	      12 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12         	 2312793	       538.1 ns/op	    2072 B/op	       8 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12         	 2216730	       542.6 ns/op	    2072 B/op	       8 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12         	 2196058	       544.5 ns/op	    2072 B/op	       8 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12        	 2514289	       487.2 ns/op	    2048 B/op	       6 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12        	 2499151	       478.9 ns/op	    2048 B/op	       6 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12        	 2528698	       483.5 ns/op	    2048 B/op	       6 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12        	   28704	     55347 ns/op	  273233 B/op	     130 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12        	   30517	     43224 ns/op	  273233 B/op	     130 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12        	   30445	     41982 ns/op	  273233 B/op	     130 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12        	   50688	     22895 ns/op	  142184 B/op	      68 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12        	   54487	     22592 ns/op	  142184 B/op	      68 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12        	   54806	     22408 ns/op	  142184 B/op	      68 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12        	   97290	     12172 ns/op	   73960 B/op	      36 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12        	  101847	     12245 ns/op	   73960 B/op	      36 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12        	   99211	     12535 ns/op	   73960 B/op	      36 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12       	  165519	      7515 ns/op	   39464 B/op	      20 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12       	  164985	      7369 ns/op	   39464 B/op	      20 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12       	  161284	      7567 ns/op	   39464 B/op	      20 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12       	     477	   2601761 ns/op	26798144 B/op	    1256 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12       	     468	   2459028 ns/op	26798154 B/op	    1256 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12       	     488	   2645292 ns/op	26798122 B/op	    1255 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12       	     940	   1306914 ns/op	13443620 B/op	     631 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12       	     925	   1324086 ns/op	13443619 B/op	     631 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12       	     938	   1310383 ns/op	13443613 B/op	     630 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12       	    1833	    676860 ns/op	 6767571 B/op	     318 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12       	    1705	    679008 ns/op	 6767567 B/op	     318 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12       	    1662	    698595 ns/op	 6767561 B/op	     318 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12      	    3271	    372423 ns/op	 3429606 B/op	     162 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12      	    3234	    360332 ns/op	 3429609 B/op	     162 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12      	    3012	    356072 ns/op	 3429612 B/op	     162 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12 	    1767	    684809 ns/op	 6767564 B/op	     318 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12 	    1698	    683545 ns/op	 6767566 B/op	     318 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12 	    1706	    682775 ns/op	 6767569 B/op	     318 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12         	    6714	    177110 ns/op	  102248 B/op	     392 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12         	    7002	    173759 ns/op	  102248 B/op	     392 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12         	    7125	    189489 ns/op	  102248 B/op	     392 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12     	     342	   3232910 ns/op	19945863 B/op	   49271 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12     	     387	   3115881 ns/op	19945877 B/op	   49272 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12     	     382	   3116113 ns/op	19945875 B/op	   49272 allocs/op
+PASS
+ok  	github.com/arnonrgo/immutable	70.851s

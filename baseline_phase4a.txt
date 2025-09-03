@@ -1,0 +1,749 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/arnonrgo/immutable
+cpu: Apple M2 Pro
+BenchmarkScaling/List_Append_N100-12           	   55491	     21601 ns/op	  108056 B/op	     377 allocs/op
+BenchmarkScaling/List_Append_N100-12           	   55184	     21240 ns/op	  108056 B/op	     377 allocs/op
+BenchmarkScaling/List_Append_N100-12           	   57498	     20833 ns/op	  108056 B/op	     377 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100-12    	  362151	      3327 ns/op	    7512 B/op	      74 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100-12    	  368385	      3504 ns/op	    7512 B/op	      74 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100-12    	  341811	      3301 ns/op	    7512 B/op	      74 allocs/op
+BenchmarkScaling/Map_Set_N100-12               	   67035	     18085 ns/op	   63827 B/op	     566 allocs/op
+BenchmarkScaling/Map_Set_N100-12               	   67540	     18134 ns/op	   63827 B/op	     566 allocs/op
+BenchmarkScaling/Map_Set_N100-12               	   65980	     17833 ns/op	   63827 B/op	     566 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100-12        	  158949	      7525 ns/op	    8731 B/op	     319 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100-12        	  158140	      8086 ns/op	    8731 B/op	     319 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100-12        	  160105	      7539 ns/op	    8731 B/op	     319 allocs/op
+BenchmarkScaling/SortedMap_Set_N100-12         	   64398	     19655 ns/op	   52091 B/op	     540 allocs/op
+BenchmarkScaling/SortedMap_Set_N100-12         	   62056	     19755 ns/op	   52091 B/op	     540 allocs/op
+BenchmarkScaling/SortedMap_Set_N100-12         	   59432	     19699 ns/op	   52091 B/op	     540 allocs/op
+BenchmarkScaling/List_Append_N1000-12          	    4909	    247737 ns/op	 1440929 B/op	    4005 allocs/op
+BenchmarkScaling/List_Append_N1000-12          	    4959	    274332 ns/op	 1440930 B/op	    4005 allocs/op
+BenchmarkScaling/List_Append_N1000-12          	    5064	    266614 ns/op	 1440928 B/op	    4005 allocs/op
+BenchmarkScaling/ListBuilder_Append_N1000-12   	   58848	     19169 ns/op	   15576 B/op	     102 allocs/op
+BenchmarkScaling/ListBuilder_Append_N1000-12   	   63559	     19505 ns/op	   15576 B/op	     102 allocs/op
+BenchmarkScaling/ListBuilder_Append_N1000-12   	   58689	     18313 ns/op	   15576 B/op	     102 allocs/op
+BenchmarkScaling/Map_Set_N1000-12              	    4087	    341292 ns/op	 1000319 B/op	    5510 allocs/op
+BenchmarkScaling/Map_Set_N1000-12              	    3655	    347226 ns/op	 1000319 B/op	    5510 allocs/op
+BenchmarkScaling/Map_Set_N1000-12              	    3936	    296853 ns/op	 1000319 B/op	    5510 allocs/op
+BenchmarkScaling/MapBuilder_Set_N1000-12       	   19902	     62692 ns/op	   78335 B/op	    2247 allocs/op
+BenchmarkScaling/MapBuilder_Set_N1000-12       	   20415	     56609 ns/op	   78335 B/op	    2247 allocs/op
+BenchmarkScaling/MapBuilder_Set_N1000-12       	   20454	     59859 ns/op	   78335 B/op	    2247 allocs/op
+BenchmarkScaling/SortedMap_Set_N1000-12        	    2512	    494670 ns/op	 1050920 B/op	    6944 allocs/op
+BenchmarkScaling/SortedMap_Set_N1000-12        	    2794	    449665 ns/op	 1050921 B/op	    6944 allocs/op
+BenchmarkScaling/SortedMap_Set_N1000-12        	    3470	    476836 ns/op	 1050920 B/op	    6944 allocs/op
+BenchmarkScaling/List_Append_N10000-12         	     249	   5648153 ns/op	19945852 B/op	   49272 allocs/op
+BenchmarkScaling/List_Append_N10000-12         	     218	   5072342 ns/op	19945864 B/op	   49272 allocs/op
+BenchmarkScaling/List_Append_N10000-12         	     187	   6050497 ns/op	19945850 B/op	   49272 allocs/op
+BenchmarkScaling/ListBuilder_Append_N10000-12  	    5626	    212217 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkScaling/ListBuilder_Append_N10000-12  	    6576	    194297 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkScaling/ListBuilder_Append_N10000-12  	    6436	    183424 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkScaling/Map_Set_N10000-12             	     344	   3615912 ns/op	13159078 B/op	   68463 allocs/op
+BenchmarkScaling/Map_Set_N10000-12             	     321	   3516609 ns/op	13159078 B/op	   68463 allocs/op
+BenchmarkScaling/Map_Set_N10000-12             	     286	   4070701 ns/op	13159083 B/op	   68463 allocs/op
+BenchmarkScaling/MapBuilder_Set_N10000-12      	    1856	    633296 ns/op	  827640 B/op	   25367 allocs/op
+BenchmarkScaling/MapBuilder_Set_N10000-12      	    1905	    633963 ns/op	  827640 B/op	   25367 allocs/op
+BenchmarkScaling/MapBuilder_Set_N10000-12      	    1896	    635553 ns/op	  827640 B/op	   25367 allocs/op
+BenchmarkScaling/SortedMap_Set_N10000-12       	     248	   4845323 ns/op	15771141 B/op	   82651 allocs/op
+BenchmarkScaling/SortedMap_Set_N10000-12       	     241	   4889588 ns/op	15771154 B/op	   82651 allocs/op
+BenchmarkScaling/SortedMap_Set_N10000-12       	     246	   4916197 ns/op	15771135 B/op	   82651 allocs/op
+BenchmarkScaling/List_Append_N100000-12        	      25	  46510617 ns/op	243855600 B/op	  569421 allocs/op
+BenchmarkScaling/List_Append_N100000-12        	      25	  46648062 ns/op	243855681 B/op	  569422 allocs/op
+BenchmarkScaling/List_Append_N100000-12        	      25	  46821762 ns/op	243855831 B/op	  569424 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100000-12 	     541	   2220384 ns/op	  965121 B/op	    3297 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100000-12 	     542	   2211721 ns/op	  965119 B/op	    3297 allocs/op
+BenchmarkScaling/ListBuilder_Append_N100000-12 	     540	   2211116 ns/op	  965120 B/op	    3297 allocs/op
+BenchmarkScaling/Map_Set_N100000-12            	      13	  88871481 ns/op	177763275 B/op	  750348 allocs/op
+BenchmarkScaling/Map_Set_N100000-12            	      13	  88685651 ns/op	177763683 B/op	  750347 allocs/op
+BenchmarkScaling/Map_Set_N100000-12            	      13	  87401891 ns/op	177763328 B/op	  750348 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100000-12     	     100	  10095249 ns/op	 8386171 B/op	  305719 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100000-12     	     100	  10191603 ns/op	 8386156 B/op	  305719 allocs/op
+BenchmarkScaling/MapBuilder_Set_N100000-12     	     100	  10123575 ns/op	 8386168 B/op	  305719 allocs/op
+BenchmarkScaling/SortedMap_Set_N100000-12      	      14	  81137881 ns/op	207550491 B/op	  989042 allocs/op
+BenchmarkScaling/SortedMap_Set_N100000-12      	      14	  80276131 ns/op	207550353 B/op	  989041 allocs/op
+BenchmarkScaling/SortedMap_Set_N100000-12      	      14	  83959232 ns/op	207550717 B/op	  989045 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10-12  	 1596333	       655.5 ns/op	       108.0 bytes/element	    1080 B/op	      32 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10-12  	 1850197	       648.1 ns/op	       108.0 bytes/element	    1080 B/op	      32 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10-12  	 1984988	       601.2 ns/op	       108.0 bytes/element	    1080 B/op	      32 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N100-12 	   66992	     19364 ns/op	      1081 bytes/element	  108056 B/op	     377 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N100-12 	   61234	     19693 ns/op	      1081 bytes/element	  108056 B/op	     377 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N100-12 	   60217	     19825 ns/op	      1081 bytes/element	  108056 B/op	     377 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N1000-12         	    4846	    265042 ns/op	      1441 bytes/element	 1440928 B/op	    4005 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N1000-12         	    5127	    240535 ns/op	      1441 bytes/element	 1440929 B/op	    4005 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N1000-12         	    5010	    234344 ns/op	      1441 bytes/element	 1440929 B/op	    4005 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10000-12        	     385	   3133724 ns/op	      1995 bytes/element	19945910 B/op	   49273 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10000-12        	     384	   3261122 ns/op	      1995 bytes/element	19945912 B/op	   49273 allocs/op
+BenchmarkMemoryUsage/List_MemoryGrowth/N10000-12        	     386	   3084219 ns/op	      1995 bytes/element	19945901 B/op	   49273 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_List-12          	 1000000	      1019 ns/op	    7008 B/op	      17 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_List-12          	 1000000	      1036 ns/op	    7008 B/op	      17 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_List-12          	 1000000	      1040 ns/op	    7008 B/op	      17 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_Map-12           	 1726669	       691.3 ns/op	    3715 B/op	      16 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_Map-12           	 1710328	       685.2 ns/op	    3715 B/op	      16 allocs/op
+BenchmarkMemoryUsage/StructuralSharing_Map-12           	 1709664	       694.1 ns/op	    3715 B/op	      16 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/GoSlice_Append-12         	  129217	      9132 ns/op	   81920 B/op	       1 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/GoSlice_Append-12         	  129985	      9227 ns/op	   81920 B/op	       1 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/GoSlice_Append-12         	  129088	      9215 ns/op	   81920 B/op	       1 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/ImmutableList_Append-12   	     385	   3112436 ns/op	19945896 B/op	   49273 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/ImmutableList_Append-12   	     386	   3313961 ns/op	19945900 B/op	   49273 allocs/op
+BenchmarkComparison/SliceVsList_Sequential/ImmutableList_Append-12   	     382	   3122519 ns/op	19945896 B/op	   49273 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/GoMap_Set-12             	   12391	     96015 ns/op	  295553 B/op	      33 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/GoMap_Set-12             	   12108	     98265 ns/op	  295553 B/op	      33 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/GoMap_Set-12             	   12484	     99749 ns/op	  295553 B/op	      33 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/ImmutableMap_Set-12      	     331	   3611387 ns/op	13159078 B/op	   68463 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/ImmutableMap_Set-12      	     325	   3895410 ns/op	13159077 B/op	   68463 allocs/op
+BenchmarkComparison/MapVsBuiltin_Sequential/ImmutableMap_Set-12      	     339	   3601704 ns/op	13159081 B/op	   68463 allocs/op
+BenchmarkRealWorldPatterns/List_RandomAccess-12                      	  201411	      5929 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/List_RandomAccess-12                      	  203002	      5890 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/List_RandomAccess-12                      	  204615	      5972 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/Map_RandomAccess-12                       	   78452	     15391 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/Map_RandomAccess-12                       	   77514	     15398 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/Map_RandomAccess-12                       	   76652	     15284 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRealWorldPatterns/List_MixedOperations-12                   	    3478	    360211 ns/op	 2155397 B/op	    5658 allocs/op
+BenchmarkRealWorldPatterns/List_MixedOperations-12                   	    3447	    368315 ns/op	 2155398 B/op	    5658 allocs/op
+BenchmarkRealWorldPatterns/List_MixedOperations-12                   	    3393	    378748 ns/op	 2155399 B/op	    5658 allocs/op
+BenchmarkRealWorldPatterns/Map_MixedOperations-12                    	    4450	    271605 ns/op	 1167370 B/op	    6262 allocs/op
+BenchmarkRealWorldPatterns/Map_MixedOperations-12                    	    4544	    250200 ns/op	 1167369 B/op	    6262 allocs/op
+BenchmarkRealWorldPatterns/Map_MixedOperations-12                    	    4916	    300178 ns/op	 1167369 B/op	    6262 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch16-12                         	  284734	      4176 ns/op	    7688 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch16-12                         	  353008	      3287 ns/op	    7688 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch16-12                         	  358909	      3284 ns/op	    7688 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12                         	  344785	      3228 ns/op	    7816 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12                         	  340389	      3482 ns/op	    7816 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch32-12                         	  352824	      3472 ns/op	    7816 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12                         	  330192	      3636 ns/op	    8072 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12                         	  335424	      4109 ns/op	    8072 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch64-12                         	  332980	      3601 ns/op	    8072 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12                        	  313104	      3875 ns/op	    8584 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12                        	  319387	      3700 ns/op	    8584 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size100_Batch128-12                        	  315672	      3715 ns/op	    8584 B/op	      76 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12                        	   68986	     17254 ns/op	   15752 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12                        	   69381	     17260 ns/op	   15752 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch16-12                        	   69778	     17202 ns/op	   15752 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12                        	   71346	     18108 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12                        	   70755	     16841 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch32-12                        	   70986	     16604 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12                        	   71029	     16891 ns/op	   16136 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12                        	   71844	     16884 ns/op	   16136 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch64-12                        	   72807	     16736 ns/op	   16136 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12                       	   69412	     17043 ns/op	   16648 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12                       	   68634	     17346 ns/op	   16648 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size1000_Batch128-12                       	   69592	     17357 ns/op	   16648 B/op	     104 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12                       	    6426	    191053 ns/op	  102440 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12                       	    6307	    191748 ns/op	  102440 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch16-12                       	    6304	    189920 ns/op	  102440 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12                       	    6456	    186082 ns/op	  102568 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12                       	    6468	    191438 ns/op	  102568 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch32-12                       	    6646	    184576 ns/op	  102568 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12                       	    6229	    187892 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12                       	    6303	    195249 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch64-12                       	    6446	    188854 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12                      	    6308	    189464 ns/op	  103336 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12                      	    6403	    189180 ns/op	  103336 B/op	     395 allocs/op
+BenchmarkBatchListBuilder/Size10000_Batch128-12                      	    6289	    215188 ns/op	  103336 B/op	     395 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12                 	    6481	    191656 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12                 	    6456	    187799 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/BatchBuilder-12                 	    6391	    187599 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12               	    6604	    176692 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12               	    6682	    198953 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/RegularBuilder-12               	    6598	    180407 ns/op	  102264 B/op	     393 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12           	     374	   3189350 ns/op	19945894 B/op	   49273 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12           	     368	   3268956 ns/op	19945882 B/op	   49272 allocs/op
+BenchmarkBatchListBuilder_vs_Regular/DirectConstruction-12           	     373	   3861533 ns/op	19945886 B/op	   49272 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch16-12                          	  101731	     12158 ns/op	   10846 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch16-12                          	   98631	     11984 ns/op	   10846 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch16-12                          	   97065	     12329 ns/op	   10846 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12                          	  104158	     11941 ns/op	   11358 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12                          	   95590	     12783 ns/op	   11358 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch32-12                          	   95115	     13071 ns/op	   11358 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12                          	  101758	     12061 ns/op	   12255 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12                          	   99391	     11924 ns/op	   12255 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch64-12                          	   97317	     12232 ns/op	   12255 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12                         	  102441	     12233 ns/op	   13663 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12                         	   98179	     12042 ns/op	   13663 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size100_Batch128-12                         	   95344	     12411 ns/op	   13663 B/op	     420 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12                         	   10000	    110890 ns/op	  108045 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12                         	    9841	    115784 ns/op	  108046 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch16-12                         	   10000	    112927 ns/op	  108046 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12                         	   10000	    113002 ns/op	  108559 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12                         	   10000	    113092 ns/op	  108560 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch32-12                         	   10000	    127092 ns/op	  108560 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12                         	   10000	    112473 ns/op	  109455 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12                         	   10000	    112327 ns/op	  109454 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch64-12                         	   10000	    116097 ns/op	  109455 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12                        	   10000	    113857 ns/op	  110864 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12                        	   10000	    109925 ns/op	  110863 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size1000_Batch128-12                        	   10000	    113285 ns/op	  110863 B/op	    3992 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12                        	     954	   1254378 ns/op	 1146022 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12                        	     949	   1292561 ns/op	 1145990 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch16-12                        	     928	   1275178 ns/op	 1145999 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12                        	     955	   1244919 ns/op	 1146526 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12                        	     939	   1237418 ns/op	 1146504 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch32-12                        	     966	   1253294 ns/op	 1146506 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12                        	     954	   1222586 ns/op	 1147422 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12                        	     960	   1237254 ns/op	 1147399 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch64-12                        	     962	   1258359 ns/op	 1147396 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12                       	     946	   1225875 ns/op	 1148814 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12                       	     942	   1236246 ns/op	 1148787 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder/Size10000_Batch128-12                       	     980	   1262880 ns/op	 1148778 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12                  	     931	   1254236 ns/op	 1147417 B/op	   45114 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12                  	     955	   1235641 ns/op	 1147391 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/BatchBuilder-12                  	     976	   1251097 ns/op	 1147400 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12                	     882	   1360927 ns/op	 1214488 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12                	     856	   1350822 ns/op	 1214461 B/op	   45113 allocs/op
+BenchmarkBatchMapBuilder_vs_Regular/RegularBuilder-12                	     892	   1388575 ns/op	 1214515 B/op	   45113 allocs/op
+BenchmarkStreamingListBuilder/WithAutoFlush-12                       	    6133	    194456 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder/WithAutoFlush-12                       	    5908	    196353 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder/WithAutoFlush-12                       	    6310	    195620 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder/WithoutAutoFlush-12                    	    6072	    195239 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder/WithoutAutoFlush-12                    	    5925	    196674 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder/WithoutAutoFlush-12                    	    6055	    193722 ns/op	  102824 B/op	     395 allocs/op
+BenchmarkStreamingListBuilder_Operations/Filter-12                   	  114064	     10492 ns/op	   11272 B/op	      88 allocs/op
+BenchmarkStreamingListBuilder_Operations/Filter-12                   	  116618	     10451 ns/op	   11272 B/op	      88 allocs/op
+BenchmarkStreamingListBuilder_Operations/Filter-12                   	  116510	     10295 ns/op	   11272 B/op	      88 allocs/op
+BenchmarkStreamingListBuilder_Operations/Transform-12                	   67669	     17698 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkStreamingListBuilder_Operations/Transform-12                	   71194	     17642 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkStreamingListBuilder_Operations/Transform-12                	   67654	     17379 ns/op	   15880 B/op	     104 allocs/op
+BenchmarkSortedBatchBuilder/SortedBuffer-12                          	    7167	    166482 ns/op	   86440 B/op	    2882 allocs/op
+BenchmarkSortedBatchBuilder/SortedBuffer-12                          	    7239	    166018 ns/op	   86441 B/op	    2882 allocs/op
+BenchmarkSortedBatchBuilder/SortedBuffer-12                          	    7212	    165141 ns/op	   86441 B/op	    2882 allocs/op
+BenchmarkSortedBatchBuilder/UnsortedBuffer-12                        	    7935	    151322 ns/op	   82319 B/op	    2939 allocs/op
+BenchmarkSortedBatchBuilder/UnsortedBuffer-12                        	    8084	    161807 ns/op	   82319 B/op	    2939 allocs/op
+BenchmarkSortedBatchBuilder/UnsortedBuffer-12                        	    7918	    149890 ns/op	   82319 B/op	    2939 allocs/op
+BenchmarkPGO_MapOperations_Heavy/RandomSet-12                        	      82	  15863261 ns/op	63010499 B/op	  350369 allocs/op
+BenchmarkPGO_MapOperations_Heavy/RandomSet-12                        	      68	  15137179 ns/op	63010373 B/op	  350368 allocs/op
+BenchmarkPGO_MapOperations_Heavy/RandomSet-12                        	      79	  15406797 ns/op	63010511 B/op	  350370 allocs/op
+BenchmarkPGO_MapOperations_Heavy/SequentialSet-12                    	      26	  45541567 ns/op	85946074 B/op	  450309 allocs/op
+BenchmarkPGO_MapOperations_Heavy/SequentialSet-12                    	      26	  45090697 ns/op	85945584 B/op	  450300 allocs/op
+BenchmarkPGO_MapOperations_Heavy/SequentialSet-12                    	      27	  45360840 ns/op	85945926 B/op	  450304 allocs/op
+BenchmarkPGO_MapOperations_Heavy/MixedOperations-12                  	      46	  24613227 ns/op	49920196 B/op	  246988 allocs/op
+BenchmarkPGO_MapOperations_Heavy/MixedOperations-12                  	      48	  24526844 ns/op	49920527 B/op	  246994 allocs/op
+BenchmarkPGO_MapOperations_Heavy/MixedOperations-12                  	      50	  24331955 ns/op	49920594 B/op	  246993 allocs/op
+BenchmarkPGO_ListOperations_Heavy/AppendHeavy-12                     	     374	   3182066 ns/op	19945877 B/op	   49272 allocs/op
+BenchmarkPGO_ListOperations_Heavy/AppendHeavy-12                     	     364	   3174424 ns/op	19945898 B/op	   49273 allocs/op
+BenchmarkPGO_ListOperations_Heavy/AppendHeavy-12                     	     379	   3239035 ns/op	19945888 B/op	   49273 allocs/op
+BenchmarkPGO_ListOperations_Heavy/PrependHeavy-12                    	     525	   2257232 ns/op	14204293 B/op	   39304 allocs/op
+BenchmarkPGO_ListOperations_Heavy/PrependHeavy-12                    	     528	   2203535 ns/op	14204296 B/op	   39304 allocs/op
+BenchmarkPGO_ListOperations_Heavy/PrependHeavy-12                    	     518	   2310326 ns/op	14204291 B/op	   39304 allocs/op
+BenchmarkPGO_ListOperations_Heavy/RandomAccess-12                    	  207666	      5795 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPGO_ListOperations_Heavy/RandomAccess-12                    	  207121	      5787 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPGO_ListOperations_Heavy/RandomAccess-12                    	  207416	      5811 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/SortedInsertion-12            	      72	  16898693 ns/op	40046235 B/op	  223230 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/SortedInsertion-12            	      69	  16886475 ns/op	40046249 B/op	  223232 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/SortedInsertion-12            	      69	  16995588 ns/op	40046175 B/op	  223230 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/ReverseSortedInsertion-12     	      80	  16495885 ns/op	38940822 B/op	  220962 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/ReverseSortedInsertion-12     	      74	  16652091 ns/op	38941112 B/op	  220964 allocs/op
+BenchmarkPGO_SortedMapOperations_Heavy/ReverseSortedInsertion-12     	      69	  16574952 ns/op	38941049 B/op	  220963 allocs/op
+BenchmarkList_Get/size-100-12                                        	264959126	         4.513 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-100-12                                        	264683160	         4.517 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-100-12                                        	264457710	         4.526 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-1000-12                                       	266722801	         4.532 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-1000-12                                       	268228176	         4.532 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-1000-12                                       	264795736	         4.660 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-10000-12                                      	177203059	         6.000 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-10000-12                                      	198695275	         6.071 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-10000-12                                      	198744801	         5.999 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-100000-12                                     	148029450	         7.989 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-100000-12                                     	149473222	         8.035 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Get/size-100000-12                                     	149629953	         8.094 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100-12                                       	1000000000	         0.6063 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100-12                                       	1000000000	         0.6037 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100-12                                       	1000000000	         0.6031 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-1000-12                                      	1000000000	         0.6030 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-1000-12                                      	1000000000	         0.6015 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-1000-12                                      	1000000000	         0.6050 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-10000-12                                     	1000000000	         0.6023 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-10000-12                                     	1000000000	         0.6015 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-10000-12                                     	1000000000	         0.6029 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100000-12                                    	1000000000	         0.6016 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100000-12                                    	1000000000	         0.6072 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSlice_Get/size-100000-12                                    	1000000000	         0.6034 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_RandomSet/size-100-12                                  	 5148301	       237.7 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-100-12                                  	 4970324	       238.0 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-100-12                                  	 5003781	       242.3 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-1000-12                                 	 4995433	       237.5 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-1000-12                                 	 4908972	       242.0 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-1000-12                                 	 4886660	       240.9 ns/op	    1472 B/op	       4 allocs/op
+BenchmarkList_RandomSet/size-10000-12                                	 3668836	       342.8 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_RandomSet/size-10000-12                                	 3608576	       334.7 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_RandomSet/size-10000-12                                	 3499501	       336.8 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_RandomSet/size-100000-12                               	 2033082	       585.3 ns/op	    2624 B/op	       6 allocs/op
+BenchmarkList_RandomSet/size-100000-12                               	 2042886	       584.4 ns/op	    2624 B/op	       6 allocs/op
+BenchmarkList_RandomSet/size-100000-12                               	 2046741	       579.1 ns/op	    2624 B/op	       6 allocs/op
+BenchmarkMap_Get/size-100-12                                         	95474887	        12.47 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-100-12                                         	95370553	        12.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-100-12                                         	97761330	        12.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-1000-12                                        	100000000	        11.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-1000-12                                        	100000000	        11.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-1000-12                                        	100000000	        11.53 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-10000-12                                       	83982153	        14.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-10000-12                                       	82613806	        14.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-10000-12                                       	82865774	        14.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-100000-12                                      	67568517	        17.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-100000-12                                      	65348058	        17.32 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Get/size-100000-12                                      	65658534	        18.20 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100-12                                       	248781252	         4.641 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100-12                                       	210996862	         4.931 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100-12                                       	225250185	         5.323 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-1000-12                                      	188583778	         5.508 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-1000-12                                      	216334240	         5.476 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-1000-12                                      	229843520	         5.410 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-10000-12                                     	177629949	         6.913 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-10000-12                                     	176489122	         6.965 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-10000-12                                     	170401959	         6.982 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100000-12                                    	116849181	         9.375 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100000-12                                    	121209307	        10.18 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoMap_Get/size-100000-12                                    	100000000	        10.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomSet/size-100-12                                   	 4121962	       346.0 ns/op	     745 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-100-12                                   	 4258365	       287.4 ns/op	     745 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-100-12                                   	 3968431	       292.7 ns/op	     745 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-1000-12                                  	 2386110	       511.8 ns/op	    1222 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-1000-12                                  	 3302155	       456.3 ns/op	    1222 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-1000-12                                  	 2644258	       395.1 ns/op	    1222 B/op	       6 allocs/op
+BenchmarkMap_RandomSet/size-10000-12                                 	 1000000	      1026 ns/op	    1421 B/op	       7 allocs/op
+BenchmarkMap_RandomSet/size-10000-12                                 	 1316346	       908.5 ns/op	    1421 B/op	       7 allocs/op
+BenchmarkMap_RandomSet/size-10000-12                                 	 1557925	       773.1 ns/op	    1421 B/op	       7 allocs/op
+BenchmarkMap_RandomSet/size-100000-12                                	  921637	      1453 ns/op	    1897 B/op	       8 allocs/op
+BenchmarkMap_RandomSet/size-100000-12                                	 1000000	      1285 ns/op	    1897 B/op	       8 allocs/op
+BenchmarkMap_RandomSet/size-100000-12                                	  915831	      1699 ns/op	    1897 B/op	       8 allocs/op
+BenchmarkMap_RandomDelete/size-100-12                                	543927222	         2.445 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-100-12                                	530431603	         2.402 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-100-12                                	347906172	         2.914 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-1000-12                               	512753314	         2.297 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-1000-12                               	496916614	         2.454 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-1000-12                               	459675523	         2.457 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-10000-12                              	473002246	         2.376 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-10000-12                              	494624733	         2.606 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-10000-12                              	503676400	         2.671 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-100000-12                             	472625719	         2.517 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-100000-12                             	411750080	         2.501 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_RandomDelete/size-100000-12                             	455031123	         2.592 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100-12                                   	28276960	        41.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100-12                                   	26101094	        42.31 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100-12                                   	29660876	        46.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-1000-12                                  	14808865	        89.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-1000-12                                  	14213244	        83.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-1000-12                                  	14407130	        91.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-10000-12                                 	12243554	        88.06 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-10000-12                                 	14505117	        82.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-10000-12                                 	14469482	        82.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100000-12                                	12566979	        95.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100000-12                                	11689534	        95.72 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_Get/size-100000-12                                	12341937	        94.77 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomSet/size-100-12                             	 5371455	       226.5 ns/op	     625 B/op	       6 allocs/op
+BenchmarkSortedMap_RandomSet/size-100-12                             	 5193734	       227.6 ns/op	     625 B/op	       6 allocs/op
+BenchmarkSortedMap_RandomSet/size-100-12                             	 5519137	       224.7 ns/op	     625 B/op	       6 allocs/op
+BenchmarkSortedMap_RandomSet/size-1000-12                            	 2912800	       422.7 ns/op	    1118 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-1000-12                            	 2927049	       408.0 ns/op	    1118 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-1000-12                            	 2910508	       406.3 ns/op	    1118 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-10000-12                           	 2008407	       629.8 ns/op	    1601 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-10000-12                           	 1958996	       618.9 ns/op	    1601 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-10000-12                           	 2034698	       633.3 ns/op	    1601 B/op	       8 allocs/op
+BenchmarkSortedMap_RandomSet/size-100000-12                          	  936003	      1160 ns/op	    1955 B/op	      10 allocs/op
+BenchmarkSortedMap_RandomSet/size-100000-12                          	  887980	      1153 ns/op	    1955 B/op	      10 allocs/op
+BenchmarkSortedMap_RandomSet/size-100000-12                          	  958141	      1172 ns/op	    1955 B/op	      10 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100-12                          	566399862	         2.130 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100-12                          	563790662	         2.125 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100-12                          	563551706	         2.127 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-1000-12                         	562133073	         2.353 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-1000-12                         	510964083	         4.198 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-1000-12                         	493695016	         2.604 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-10000-12                        	540186601	         2.500 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-10000-12                        	431129011	         2.638 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-10000-12                        	441297205	         2.539 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100000-12                       	357721723	         3.001 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100000-12                       	422927017	         2.839 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSortedMap_RandomDelete/size-100000-12                       	422122140	         2.725 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnhanced_MapSet_Loop-12                                     	15424155	        89.86 ns/op	      97 B/op	       4 allocs/op
+BenchmarkEnhanced_MapSet_Loop-12                                     	13682178	        93.59 ns/op	      97 B/op	       4 allocs/op
+BenchmarkEnhanced_MapSet_Loop-12                                     	12805339	        95.23 ns/op	      97 B/op	       4 allocs/op
+BenchmarkEnhanced_ListAppend_Loop-12                                 	 1409644	       845.1 ns/op	    2767 B/op	       6 allocs/op
+BenchmarkEnhanced_ListAppend_Loop-12                                 	 1471705	       811.1 ns/op	    2785 B/op	       6 allocs/op
+BenchmarkEnhanced_ListAppend_Loop-12                                 	 1351312	       908.8 ns/op	    2748 B/op	       6 allocs/op
+BenchmarkBuiltin_MinMax/BuiltIn-12                                   	1000000000	         1.317 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_MinMax/BuiltIn-12                                   	1000000000	         1.176 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_MinMax/BuiltIn-12                                   	977989792	         1.340 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_MinMax/Custom-12                                    	521215930	         2.463 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_MinMax/Custom-12                                    	494439019	         2.422 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_MinMax/Custom-12                                    	561764877	         2.130 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CmpCompare-12                                   	95538860	        12.45 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CmpCompare-12                                   	95144966	        12.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CmpCompare-12                                   	95571518	        12.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CustomCompare-12                                	97410504	        12.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CustomCompare-12                                	96630999	        12.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCmp_Compare/CustomCompare-12                                	95639438	        12.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/BuiltInClear-12                               	 3855681	       311.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/BuiltInClear-12                               	 3837750	       313.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/BuiltInClear-12                               	 3854245	       312.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/ManualClear-12                                	 3827508	       312.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/ManualClear-12                                	 3835479	       312.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltin_Clear/ManualClear-12                                	 2931289	       344.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Append-12                                              	 1961198	       648.6 ns/op	    2891 B/op	       6 allocs/op
+BenchmarkList_Append-12                                              	 1930605	       639.8 ns/op	    2886 B/op	       6 allocs/op
+BenchmarkList_Append-12                                              	 1951136	       634.1 ns/op	    2890 B/op	       6 allocs/op
+BenchmarkList_Prepend-12                                             	 2491234	       520.8 ns/op	    2383 B/op	       5 allocs/op
+BenchmarkList_Prepend-12                                             	 2448514	       562.6 ns/op	    2378 B/op	       5 allocs/op
+BenchmarkList_Prepend-12                                             	 2487039	       528.5 ns/op	    2382 B/op	       5 allocs/op
+BenchmarkList_Set-12                                                 	 3163435	       495.5 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_Set-12                                                 	 1569654	      1182 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_Set-12                                                 	 1000000	      1166 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkList_Iterator/Forward-12                                    	100000000	        13.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Iterator/Forward-12                                    	143174240	        10.50 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Iterator/Forward-12                                    	100000000	        15.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Iterator/Reverse-12                                    	100000000	        15.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Iterator/Reverse-12                                    	88574775	        11.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkList_Iterator/Reverse-12                                    	100000000	        12.12 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Int-12                                  	100000000	        11.98 ns/op	      45 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Int-12                                  	253888504	        11.33 ns/op	      44 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Int-12                                  	352849861	        11.88 ns/op	      49 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Interface-12                            	29963268	        33.78 ns/op	      92 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Interface-12                            	31660807	        43.86 ns/op	     107 B/op	       0 allocs/op
+BenchmarkBuiltinSlice_Append/Interface-12                            	29520172	        46.78 ns/op	      93 B/op	       0 allocs/op
+BenchmarkListBuilder_Append-12                                       	45345903	        40.41 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Append-12                                       	44844096	        37.92 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Append-12                                       	40449324	        31.33 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Prepend-12                                      	50746930	        28.16 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Prepend-12                                      	61041908	        28.65 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Prepend-12                                      	48320281	        26.00 ns/op	       9 B/op	       0 allocs/op
+BenchmarkListBuilder_Set-12                                          	73978938	        16.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkListBuilder_Set-12                                          	69488344	        16.82 ns/op	       0 B/op	       0 allocs/op
+BenchmarkListBuilder_Set-12                                          	78460648	        16.81 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Set-12                                           	17942460	        91.08 ns/op	      67 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Set-12                                           	18915050	        88.07 ns/op	      64 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Set-12                                           	17902286	        90.00 ns/op	      67 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Delete-12                                        	12667179	        84.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Delete-12                                        	12258265	        85.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBuiltinMap_Delete-12                                        	12388188	        83.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Set-12                                                  	 1000000	      1028 ns/op	    2145 B/op	       7 allocs/op
+BenchmarkMap_Set-12                                                  	 1226952	      1049 ns/op	    2197 B/op	       7 allocs/op
+BenchmarkMap_Set-12                                                  	 1246005	      1032 ns/op	    2201 B/op	       7 allocs/op
+BenchmarkMap_Delete-12                                               	 1328349	       968.3 ns/op	    2523 B/op	       8 allocs/op
+BenchmarkMap_Delete-12                                               	 1228858	      1009 ns/op	    2522 B/op	       8 allocs/op
+BenchmarkMap_Delete-12                                               	 1000000	      1004 ns/op	    2522 B/op	       8 allocs/op
+BenchmarkMap_Iterator/Forward-12                                     	100000000	        11.29 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Iterator/Forward-12                                     	100000000	        11.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMap_Iterator/Forward-12                                     	100000000	        11.31 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMapBuilder_Set-12                                           	11040141	       143.2 ns/op	      78 B/op	       2 allocs/op
+BenchmarkMapBuilder_Set-12                                           	11873325	       139.2 ns/op	      74 B/op	       2 allocs/op
+BenchmarkMapBuilder_Set-12                                           	12378502	       137.7 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMapBuilder_Delete-12                                        	SIGQUIT: quit
+PC=0x100a5a700 m=0 sigcode=0
+
+goroutine 0 gp=0x100df0880 m=0 mp=0x100df1120 [idle]:
+runtime.spanOf(...)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mheap.go:698
+runtime.findObject(0x14000039250?, 0x14000039288?, 0x100dfda28?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mbitmap.go:1272 +0x30 fp=0x16f411b30 sp=0x16f411af0 pc=0x100a5a700
+runtime.wbBufFlush1(0x14000038008)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mwbbuf.go:240 +0xec fp=0x16f411b90 sp=0x16f411b30 pc=0x100a2168c
+runtime.wbBufFlush.func1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mwbbuf.go:181 +0x24 fp=0x16f411bb0 sp=0x16f411b90 pc=0x100a57a34
+runtime.systemstack(0x87)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:244 +0x6c fp=0x16f411bc0 sp=0x16f411bb0 pc=0x100a6102c
+
+goroutine 976 gp=0x140001836c0 m=0 mp=0x100df1120 [running]:
+runtime.systemstack_switch()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:201 +0x8 fp=0x14000106810 sp=0x14000106800 pc=0x100a60fa8
+runtime.wbBufFlush()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mwbbuf.go:180 +0x4c fp=0x14000106830 sp=0x14000106810 pc=0x100a2158c
+gcWriteBarrier()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1295 +0x74 fp=0x14000106910 sp=0x14000106830 pc=0x100a60824
+github.com/arnonrgo/immutable.(*mapBitmapIndexedNode[...]).set(0x100c892e0, 0x48f1fb, 0x48f1fb?, 0x10?, 0x48f1fb?, {0x100c81b40?, 0x100e167c0?}, 0x1?, 0x14008548c6b)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1166 +0x230 fp=0x140001069a0 sp=0x14000106910 pc=0x100b25210
+github.com/arnonrgo/immutable.(*mapBitmapIndexedNode[...]).set(0x140002eeb48?, 0x140002eed30?, 0x1e?, 0x3?, {0x100c81b40?, 0x100e167c0?}, 0x0?, 0x2?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1120 +0x54 fp=0x14000106a00 sp=0x140001069a0 pc=0x100b44414
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x100c888e0, 0x434fca, 0x434fca?, 0xf?, 0x434fca?, {0x100c81b40?, 0x100e167c0?}, 0x1?, 0x1401170de59)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1281 +0x90 fp=0x14000106a80 sp=0x14000106a00 pc=0x100b239b0
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x140000b2488?, 0x140000b2620?, 0x19?, 0x3?, {0x100c81b40?, 0x100e167c0?}, 0x44?, 0x14000106b78?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1270 +0x54 fp=0x14000106ae0 sp=0x14000106a80 pc=0x100b441f4
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x100c888e0, 0x14000106ba8, 0x100a027bc?, 0x14000106b98?, 0xa2158c?, {0x100c81b40?, 0x100e167c0?}, 0x1?, 0x100a0ec94)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1281 +0x90 fp=0x14000106b60 sp=0x14000106ae0 pc=0x100b239b0
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x140000a2008?, 0x140000a20f0?, 0xe?, 0x5?, {0x100c81b40?, 0x100e167c0?}, 0x0?, 0x4?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1270 +0x54 fp=0x14000106bc0 sp=0x14000106b60 pc=0x100b441f4
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x100c888e0, 0x0, 0x0?, 0x14000106c78?, 0xa2158c?, {0x100c81b40?, 0x100e167c0?}, 0x1?, 0x10005)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1281 +0x90 fp=0x14000106c40 sp=0x14000106bc0 pc=0x100b239b0
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x1009fe5c4?, 0x1?, 0x100e167c0?, 0x106d18?, {0x100c81b40?, 0x100e167c0?}, 0x0?, 0x4?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1270 +0x54 fp=0x14000106ca0 sp=0x14000106c40 pc=0x100b441f4
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x100c888e0, 0x0, 0x0?, 0x14000106d78?, 0xb269ac?, {0x100c81b40?, 0x100e167c0?}, 0x1?, 0xffffffffffffffff)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1281 +0x90 fp=0x14000106d20 sp=0x14000106ca0 pc=0x100b239b0
+github.com/arnonrgo/immutable.(*mapHashArrayNode[...]).set(0x3aa10d?, 0x16f5b2c48?, 0x7d?, 0x3?, {0x100c81b40?, 0x100e167c0?}, 0x0?, 0x10?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:1270 +0x54 fp=0x14000106d80 sp=0x14000106d20 pc=0x100b441f4
+github.com/arnonrgo/immutable.(*Map[...]).set(0x100c8d800, 0x48f1fb, 0x48f1fb, 0x1)
+	/Users/arnonro/Development/oss/immutable/immutable.go:882 +0x178 fp=0x14000106e00 sp=0x14000106d80 pc=0x100b269e8
+github.com/arnonrgo/immutable.(*MapBuilder[...]).Set(0x100c86ac0, 0x45a686?, 0x45a686?)
+	/Users/arnonro/Development/oss/immutable/immutable.go:961 +0x34 fp=0x14000106e40 sp=0x14000106e00 pc=0x100b232a4
+github.com/arnonrgo/immutable.BenchmarkMapBuilder_Delete(0x140001442c8)
+	/Users/arnonro/Development/oss/immutable/immutable_test.go:1484 +0x54 fp=0x14000106e90 sp=0x14000106e40 pc=0x100b02ea4
+testing.(*B).runN(0x140001442c8, 0x64)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:219 +0x1a4 fp=0x14000106f20 sp=0x14000106e90 pc=0x100ab28c4
+testing.(*B).launch(0x140001442c8)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:354 +0x178 fp=0x14000106fb0 sp=0x14000106f20 pc=0x100ab3468
+testing.(*B).doBench.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:296 +0x28 fp=0x14000106fd0 sp=0x14000106fb0 pc=0x100ab32b8
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000106fd0 sp=0x14000106fd0 pc=0x100a633a4
+created by testing.(*B).doBench in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:296 +0x68
+
+goroutine 1 gp=0x140000021c0 m=nil [chan receive]:
+runtime.gopark(0x0?, 0x140000361a0?, 0x30?, 0x42?, 0x107a08fa8?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x140001556d0 sp=0x140001556b0 pc=0x100a5bb68
+runtime.chanrecv(0x140000241c0, 0x0, 0x1)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/chan.go:664 +0x42c fp=0x14000155750 sp=0x140001556d0 pc=0x1009f7cac
+runtime.chanrecv1(0x1400005c038?, 0x14000024230?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/chan.go:506 +0x14 fp=0x14000155780 sp=0x14000155750 pc=0x1009f7874
+testing.(*B).doBench(0x140001442c8)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:297 +0x78 fp=0x140001557e0 sp=0x14000155780 pc=0x100ab3228
+testing.(*benchState).processBench(0x1400000c0f0, 0x100c77fa0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:747 +0x2c8 fp=0x14000155980 sp=0x140001557e0 pc=0x100ab4a08
+testing.(*B).run(0x140001442c8?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:288 +0x64 fp=0x140001559b0 sp=0x14000155980 pc=0x100ab3024
+testing.(*B).Run(0x14000144008, {0x100baab70?, 0x14000104ae8?}, 0x100c7e650)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:848 +0x3fc fp=0x14000155ab0 sp=0x140001559b0 pc=0x100ab52dc
+testing.runBenchmarks.func1(0x14000144008)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:708 +0x40 fp=0x14000155af0 sp=0x14000155ab0 pc=0x100ab4700
+testing.(*B).runN(0x14000144008, 0x1)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:219 +0x1a4 fp=0x14000155b80 sp=0x14000155af0 pc=0x100ab28c4
+testing.runBenchmarks({0x100babb70, 0x1d}, 0x14?, {0x100dec760, 0x39, 0x7?})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/benchmark.go:717 +0x51c fp=0x14000155c90 sp=0x14000155b80 pc=0x100ab466c
+testing.(*M).Run(0x1400007e140)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/testing/testing.go:2158 +0x86c fp=0x14000155ec0 sp=0x14000155c90 pc=0x100abf94c
+main.main()
+	_testmain.go:273 +0x90 fp=0x14000155f40 sp=0x14000155ec0 pc=0x100b9a000
+runtime.main()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:283 +0x284 fp=0x14000155fd0 sp=0x14000155f40 pc=0x100a28434
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000155fd0 sp=0x14000155fd0 pc=0x100a633a4
+
+goroutine 2 gp=0x14000002700 m=nil [force gc (idle), 10 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000058f90 sp=0x14000058f70 pc=0x100a5bb68
+runtime.goparkunlock(...)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:441
+runtime.forcegchelper()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:348 +0xb8 fp=0x14000058fd0 sp=0x14000058f90 pc=0x100a28788
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000058fd0 sp=0x14000058fd0 pc=0x100a633a4
+created by runtime.init.7 in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:336 +0x24
+
+goroutine 3 gp=0x14000002fc0 m=nil [GC sweep wait]:
+runtime.gopark(0x100df0301?, 0x100df0380?, 0xc?, 0x9?, 0x1?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000059760 sp=0x14000059740 pc=0x100a5bb68
+runtime.goparkunlock(...)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:441
+runtime.bgsweep(0x1400007a000)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgcsweep.go:316 +0x108 fp=0x140000597b0 sp=0x14000059760 pc=0x100a11f08
+runtime.gcenable.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:204 +0x28 fp=0x140000597d0 sp=0x140000597b0 pc=0x100a05d98
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x140000597d0 sp=0x140000597d0 pc=0x100a633a4
+created by runtime.gcenable in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:204 +0x6c
+
+goroutine 4 gp=0x14000003180 m=nil [GC scavenge wait]:
+runtime.gopark(0xe3c9ce?, 0xd422f7?, 0x0?, 0x0?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000059f60 sp=0x14000059f40 pc=0x100a5bb68
+runtime.goparkunlock(...)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:441
+runtime.(*scavengerState).park(0x100df0660)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgcscavenge.go:425 +0x5c fp=0x14000059f90 sp=0x14000059f60 pc=0x100a0f9ac
+runtime.bgscavenge(0x1400007a000)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgcscavenge.go:658 +0xac fp=0x14000059fb0 sp=0x14000059f90 pc=0x100a0ff4c
+runtime.gcenable.gowrap2()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:205 +0x28 fp=0x14000059fd0 sp=0x14000059fb0 pc=0x100a05d38
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000059fd0 sp=0x14000059fd0 pc=0x100a633a4
+created by runtime.gcenable in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:205 +0xac
+
+goroutine 5 gp=0x14000003340 m=nil [finalizer wait, 10 minutes]:
+runtime.gopark(0x140000585b8?, 0x100a5c6b4?, 0x1?, 0x85?, 0x100a7d924?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000058590 sp=0x14000058570 pc=0x100a5bb68
+runtime.runfinq()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mfinal.go:196 +0x108 fp=0x140000587d0 sp=0x14000058590 pc=0x100a04d98
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x140000587d0 sp=0x140000587d0 pc=0x100a633a4
+created by runtime.createfing in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mfinal.go:166 +0x80
+
+goroutine 6 gp=0x140000036c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0xd0?, 0x74?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400040ff10 sp=0x1400040fef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400040ffb0 sp=0x1400040ff10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400040ffd0 sp=0x1400040ffb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400040ffd0 sp=0x1400040ffd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 7 gp=0x14000003880 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0xb4?, 0xad?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000148f10 sp=0x14000148ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000148fb0 sp=0x14000148f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000148fd0 sp=0x14000148fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000148fd0 sp=0x14000148fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 8 gp=0x14000003a40 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x1?, 0xd6?, 0x67?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400014af10 sp=0x1400014aef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400014afb0 sp=0x1400014af10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400014afd0 sp=0x1400014afb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400014afd0 sp=0x1400014afd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 9 gp=0x14000003c00 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0xbb?, 0xa5?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000149f10 sp=0x14000149ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000149fb0 sp=0x14000149f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000149fd0 sp=0x14000149fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000149fd0 sp=0x14000149fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 10 gp=0x14000003dc0 m=nil [GC worker (idle)]:
+runtime.gopark(0x2ffc22e2f7659?, 0x3?, 0x0?, 0xda?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000104f10 sp=0x14000104ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000104fb0 sp=0x14000104f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000104fd0 sp=0x14000104fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000104fd0 sp=0x14000104fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 11 gp=0x14000146000 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0x7a?, 0x9b?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000101f10 sp=0x14000101ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000101fb0 sp=0x14000101f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000101fd0 sp=0x14000101fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000101fd0 sp=0x14000101fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 12 gp=0x140001461c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0x73?, 0xa3?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400014ef10 sp=0x1400014eef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400014efb0 sp=0x1400014ef10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400014efd0 sp=0x1400014efb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400014efd0 sp=0x1400014efd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 13 gp=0x14000146380 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0x2?, 0xaf?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400014ff10 sp=0x1400014fef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400014ffb0 sp=0x1400014ff10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400014ffd0 sp=0x1400014ffb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400014ffd0 sp=0x1400014ffd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 14 gp=0x14000146540 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x1?, 0x15?, 0xe?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400014bf10 sp=0x1400014bef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400014bfb0 sp=0x1400014bf10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400014bfd0 sp=0x1400014bfb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400014bfd0 sp=0x1400014bfd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 15 gp=0x14000146700 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0x2b?, 0x3a?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000102f10 sp=0x14000102ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000102fb0 sp=0x14000102f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000102fd0 sp=0x14000102fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000102fd0 sp=0x14000102fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 16 gp=0x140001468c0 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x1?, 0xa4?, 0xa7?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x14000100f10 sp=0x14000100ef0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x14000100fb0 sp=0x14000100f10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x14000100fd0 sp=0x14000100fb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x14000100fd0 sp=0x14000100fd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+goroutine 17 gp=0x14000146a80 m=nil [GC worker (idle)]:
+runtime.gopark(0x100e175e0?, 0x3?, 0x55?, 0x41?, 0x0?)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/proc.go:435 +0xc8 fp=0x1400014df10 sp=0x1400014def0 pc=0x100a5bb68
+runtime.gcBgMarkWorker(0x14000024310)
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1423 +0xdc fp=0x1400014dfb0 sp=0x1400014df10 pc=0x100a0822c
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x28 fp=0x1400014dfd0 sp=0x1400014dfb0 pc=0x100a08118
+runtime.goexit({})
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/asm_arm64.s:1223 +0x4 fp=0x1400014dfd0 sp=0x1400014dfd0 pc=0x100a633a4
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/Users/arnonro/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.5.darwin-arm64/src/runtime/mgc.go:1339 +0x140
+
+r0      0x14005ed54e0
+r1      0x0
+r2      0x0
+r3      0x21
+r4      0x5001
+r5      0x105908000
+r6      0x14000039250
+r7      0x14005ed54e0
+r8      0x1
+r9      0x14005ed67c8
+r10     0x100c82688
+r11     0x1400b7ddf68
+r12     0x100c82688
+r13     0x1400ed127f8
+r14     0x4
+r15     0xf
+r16     0x16f401f90
+r17     0x14000106990
+r18     0x0
+r19     0x16f411b18
+r20     0x16f411a90
+r21     0x16f411b80
+r22     0x0
+r23     0x0
+r24     0x0
+r25     0x10
+r26     0x100c7f328
+r27     0x0
+r28     0x100df0880
+r29     0x16f411ae8
+lr      0x100a2168c
+sp      0x16f411af0
+pc      0x100a5a700
+fault   0x100a5a700
+*** Test killed with quit: ran too long (11m0s).
+exit status 2
+FAIL	github.com/arnonrgo/immutable	660.107s
