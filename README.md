@@ -37,6 +37,15 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 - **Cache-Friendly Design**: Improved memory layout for better CPU cache utilization
 
 
+## Concurrency with immutable collections
+
+Immutable structures are snapshot-based: every mutation returns a new instance; the original remains unchanged. This makes concurrent reads safe without locks.
+
+- Recommended pattern: a single writer goroutine owns the evolving collection and applies updates received via a channel. It then sends immutable snapshots to readers.
+- Readers can safely use received snapshots without copying. Structural sharing ensures those snapshots are cheap to create and pass around.
+- If you need a single, shared, evolving reference updated by multiple goroutines, synchronize the reference update (mutex or atomic CAS on a pointer). Without that, simultaneous `Enqueue`/`Dequeue` on the same snapshot may race logically (e.g., multiple consumers reading the same head, or lost enqueues).
+- Builders are mutable conveniences and are not safe for concurrent use; keep them confined to one goroutine.
+
 ### **Batch Builders**
 
 **Complete High-Performance Builder Suite:**
@@ -136,6 +145,37 @@ the range of the `List`.
 
 
 
+### Searching list elements
+
+You can check if a value exists in the list using `Contains()`. For comparable
+types, equality uses `==`. For non-comparable types (e.g., `[]byte`), it falls
+back to `reflect.DeepEqual`.
+
+```go
+// Basic usage
+l := immutable.NewList[int]()
+for i := 0; i < 5; i++ { l = l.Append(i) }
+
+fmt.Println(l.Contains(3))  // true
+fmt.Println(l.Contains(10)) // false
+
+// Non-comparable example uses DeepEqual under the hood
+b := immutable.NewList[[]byte]([]byte("foo"), []byte("bar"))
+fmt.Println(b.Contains([]byte("foo"))) // true
+```
+
+For full control and best performance on custom types, use `ContainsFunc()` to
+provide an equality function:
+
+```go
+type node struct{ v int }
+l := immutable.NewList[*node](&node{v: 1}, &node{v: 2})
+
+eq := func(a, b *node) bool { return a != nil && b != nil && a.v == b.v }
+fmt.Println(l.ContainsFunc(&node{v: 2}, eq)) // true
+fmt.Println(l.ContainsFunc(&node{v: 3}, eq)) // false
+```
+
 ### Iterating lists
 
 Iterators provide a clean, simple way to iterate over the elements of the list
@@ -182,6 +222,35 @@ fmt.Println(l.Get(1)) // "baz"
 
 Builders are invalid after the call to `List()`.
 
+
+## Queue
+
+An immutable FIFO queue with amortized O(1) Enqueue, Dequeue, and Peek, implemented using a two-list (Okasaki) representation. Internally it reuses `List[T]` for structural sharing and uses the slice fast-path for small sizes.
+
+```go
+q := immutable.NewQueue[int]()
+q = q.Enqueue(1).Enqueue(2).Enqueue(3)
+
+v, ok := q.Peek() // v=1, ok=true
+
+q, v, ok = q.Dequeue() // v=1, ok=true
+q, v, ok = q.Dequeue() // v=2, ok=true
+
+itr := q.Iterator()
+for !itr.Done() {
+    idx, x, _ := itr.Next()
+    _ = idx
+    _ = x
+}
+
+// Builder
+b := immutable.NewQueueBuilder[int]()
+b.Enqueue(10)
+b.EnqueueSlice([]int{20, 30})
+finalQ := b.Queue()
+```
+
+Thread safety: operations return new queues; existing instances are never mutated, so concurrent reads are safe.
 
 ## Map
 

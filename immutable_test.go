@@ -186,7 +186,7 @@ func TestList(t *testing.T) {
 		 */
 		l := NewList[*int]()
 		var ints [5]int
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			l = l.Append(&ints[i])
 		}
 		sl := l.Slice(2, 4)
@@ -260,6 +260,84 @@ func TestList(t *testing.T) {
 		}
 		if err := l.Validate(); err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+func TestList_Contains(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		l := NewList[int]()
+		if l.Contains(1) {
+			t.Fatalf("expected false for empty list")
+		}
+	})
+
+	t.Run("SliceBackend_PresentAbsent", func(t *testing.T) {
+		l := NewList[int]()
+		for i := 0; i < 10; i++ { // below slice threshold
+			l = l.Append(i)
+		}
+		if !l.Contains(0) || !l.Contains(5) || !l.Contains(9) {
+			t.Fatalf("expected present elements to be found in slice-backed list")
+		}
+		if l.Contains(10) {
+			t.Fatalf("expected absent element to be false in slice-backed list")
+		}
+	})
+
+	t.Run("TrieBackend_PresentAbsent", func(t *testing.T) {
+		l := NewList[int]()
+		for i := 0; i < 64; i++ { // ensure trie backend
+			l = l.Append(i)
+		}
+		if !l.Contains(0) || !l.Contains(32) || !l.Contains(63) {
+			t.Fatalf("expected present elements to be found in trie-backed list")
+		}
+		if l.Contains(64) {
+			t.Fatalf("expected absent element to be false in trie-backed list")
+		}
+	})
+
+	t.Run("NonComparable_DeepEqual", func(t *testing.T) {
+		l := NewList[[]byte]()
+		a := []byte("foo")
+		b := []byte("bar")
+		c := []byte("baz")
+		l = l.Append(a)
+		l = l.Append(b)
+		if !l.Contains([]byte("foo")) {
+			t.Fatalf("expected DeepEqual to match []byte contents for 'foo'")
+		}
+		if l.Contains(c) {
+			t.Fatalf("did not expect to find 'baz'")
+		}
+	})
+
+	t.Run("ContainsFunc_CustomEq", func(t *testing.T) {
+		type node struct{ v int }
+		l := NewList[*node]()
+		l = l.Append(&node{v: 1})
+		l = l.Append(&node{v: 2})
+		// pointer equality would fail; use custom equality on value
+		eq := func(a, b *node) bool { return a != nil && b != nil && a.v == b.v }
+		if !l.ContainsFunc(&node{v: 2}, eq) {
+			t.Fatalf("expected ContainsFunc to match by value")
+		}
+		if l.ContainsFunc(&node{v: 3}, eq) {
+			t.Fatalf("did not expect match for value 3")
+		}
+	})
+
+	t.Run("Builder_Contains", func(t *testing.T) {
+		b := NewListBuilder[int]()
+		for i := 0; i < 5; i++ {
+			b.Append(i)
+		}
+		if !b.Contains(3) {
+			t.Fatalf("expected builder to report containment")
+		}
+		if b.Contains(10) {
+			t.Fatalf("did not expect builder to report containment for absent element")
 		}
 	})
 }
