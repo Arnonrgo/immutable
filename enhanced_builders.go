@@ -2,6 +2,7 @@ package immutable
 
 import (
 	"cmp"
+	"iter"
 )
 
 // BatchListBuilder provides enhanced batch operations for efficient List construction.
@@ -49,6 +50,10 @@ func (b *BatchListBuilder[T]) Flush() {
 	}
 
 	// Fast path: if underlying list is slice-backed, extend in one allocation.
+	// This may produce a slice node larger than listSliceThreshold. That is
+	// intentional: batch-built lists trade threshold compliance for build
+	// speed. The first subsequent Append/Prepend by a consumer will trigger
+	// a one-time O(n) trie conversion.
 	if sliceNode, ok := b.list.root.(*listSliceNode[T]); ok {
 		newLen := b.list.size + len(b.buffer)
 		newElements := make([]T, newLen)
@@ -213,12 +218,16 @@ func (b *BatchMapBuilder[K, V]) Flush() {
 			}
 		} else {
 			seenNew := make(map[K]struct{}, len(b.buffer))
-			for _, e := range b.buffer {
+			for i := len(b.buffer) - 1; i >= 0; i-- {
+				e := b.buffer[i]
 				if _, ok := seenNew[e.key]; ok {
 					continue
 				}
 				seenNew[e.key] = struct{}{}
 				last = append(last, e)
+			}
+			for i, j := 0, len(last)-1; i < j; i, j = i+1, j-1 {
+				last[i], last[j] = last[j], last[i]
 			}
 		}
 		// Track original keys
@@ -520,31 +529,31 @@ func NewStreamingMapBuilder[K comparable, V any](hasher Hasher[K], batchSize, au
 	}
 }
 
-// Stream processes key/value pairs through a streaming pipeline.
-func (b *StreamingMapBuilder[K, V]) Stream(entries <-chan mapEntry[K, V]) {
-	for entry := range entries {
-		b.Set(entry.key, entry.value)
+// Stream processes key/value pairs from an iterator.
+// Use maps.All(m) to stream from a Go map, or provide any iter.Seq2 source.
+func (b *StreamingMapBuilder[K, V]) Stream(seq iter.Seq2[K, V]) {
+	for key, value := range seq {
+		b.Set(key, value)
 
-		// Auto-flush when reaching threshold
 		if b.autoFlushEnabled && b.Len() >= b.autoFlushSize {
 			b.Flush()
 		}
 	}
 }
 
-// Filter processes entries through a filter function before adding.
-func (b *StreamingMapBuilder[K, V]) Filter(entries []mapEntry[K, V], filterFn func(K, V) bool) {
-	for _, entry := range entries {
-		if filterFn(entry.key, entry.value) {
-			b.Set(entry.key, entry.value)
+// Filter processes entries from an iterator, adding only those accepted by filterFn.
+func (b *StreamingMapBuilder[K, V]) Filter(seq iter.Seq2[K, V], filterFn func(K, V) bool) {
+	for key, value := range seq {
+		if filterFn(key, value) {
+			b.Set(key, value)
 		}
 	}
 }
 
-// Transform processes entries through a transformation function.
-func (b *StreamingMapBuilder[K, V]) Transform(entries []mapEntry[K, V], transformFn func(K, V) (K, V)) {
-	for _, entry := range entries {
-		newKey, newValue := transformFn(entry.key, entry.value)
+// Transform processes entries from an iterator through a transformation function.
+func (b *StreamingMapBuilder[K, V]) Transform(seq iter.Seq2[K, V], transformFn func(K, V) (K, V)) {
+	for key, value := range seq {
+		newKey, newValue := transformFn(key, value)
 		b.Set(newKey, newValue)
 	}
 }

@@ -143,9 +143,9 @@ func BenchmarkSetBuilder(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			builder := NewSetBuilder[int](nil)
 			for j := 0; j < 1000; j++ {
-				builder.Set(j)
+				builder.Add(j)
 			}
-			// Note: SetBuilder doesn't have a Build() method to return final set
+			_ = builder.Set()
 		}
 	})
 
@@ -155,7 +155,7 @@ func BenchmarkSetBuilder(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			builder := NewSortedSetBuilder[int](nil)
 			for j := 0; j < 1000; j++ {
-				builder.Set(j)
+				builder.Add(j)
 			}
 			_ = builder.SortedSet() // Get final set
 		}

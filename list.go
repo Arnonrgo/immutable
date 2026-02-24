@@ -180,7 +180,7 @@ func (l *List[T]) append(value T, mutable bool) *List[T] {
 			return other
 		}
 		// If we are at the threshold, we need to convert to a trie.
-		trieRoot := sliceNode.toTrie(true)
+		trieRoot := sliceNode.toTrie()
 		tempList := &List[T]{root: trieRoot, size: l.size, origin: 0}
 		return tempList.append(value, mutable)
 	}
@@ -220,7 +220,7 @@ func (l *List[T]) prepend(value T, mutable bool) *List[T] {
 			return other
 		}
 		// If we are at the threshold, we need to convert to a trie.
-		trieRoot := sliceNode.toTrie(true)
+		trieRoot := sliceNode.toTrie()
 		tempList := &List[T]{root: trieRoot, size: l.size, origin: 0}
 		return tempList.prepend(value, mutable)
 	}
@@ -700,7 +700,7 @@ func (n *listSliceNode[T]) deleteBefore(index int, mutable bool) listNode[T] { r
 func (n *listSliceNode[T]) deleteAfter(index int, mutable bool) listNode[T]  { return n }
 
 // toTrie converts a listSliceNode to a trie-based structure.
-func (n *listSliceNode[T]) toTrie(mutable bool) listNode[T] {
+func (n *listSliceNode[T]) toTrie() listNode[T] {
 	numElements := len(n.elements)
 	if numElements == 0 {
 		return &listLeafNode[T]{}

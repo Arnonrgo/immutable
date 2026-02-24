@@ -102,11 +102,54 @@ func TestSortedSetsDelete(t *testing.T) {
 	}
 }
 
+func TestSetBuilder(t *testing.T) {
+	b := NewSetBuilder[string](nil)
+	b.Add("foo")
+	b.Add("bar")
+	b.Add("foo") // duplicate
+
+	if b.Len() != 2 {
+		t.Fatalf("expected Len()=2, got %d", b.Len())
+	}
+	if !b.Has("foo") || !b.Has("bar") {
+		t.Fatalf("expected Has to return true for added values")
+	}
+
+	b.Delete("bar")
+	if b.Len() != 1 {
+		t.Fatalf("expected Len()=1 after delete, got %d", b.Len())
+	}
+
+	s := b.Set()
+	if s.Len() != 1 {
+		t.Fatalf("expected set length 1, got %d", s.Len())
+	}
+	if !s.Has("foo") {
+		t.Fatalf("expected set to contain foo")
+	}
+	if s.Has("bar") {
+		t.Fatalf("expected set to not contain bar")
+	}
+}
+
+func TestSetBuilder_Invalidation(t *testing.T) {
+	b := NewSetBuilder[int](nil)
+	b.Add(1)
+	_ = b.Set()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic on double Set() call")
+		}
+	}()
+	_ = b.Set()
+}
+
 func TestSortedSetBuilder(t *testing.T) {
 	b := NewSortedSetBuilder[string](nil)
-	b.Set("test3")
-	b.Set("test1")
-	b.Set("test2")
+	b.Add("test3")
+	b.Add("test1")
+	b.Add("test2")
 
 	s := b.SortedSet()
 	items := s.Items()
@@ -123,4 +166,17 @@ func TestSortedSetBuilder(t *testing.T) {
 	if items[2] != "test3" {
 		t.Fatalf("Third item incorrectly sorted")
 	}
+}
+
+func TestSortedSetBuilder_Invalidation(t *testing.T) {
+	b := NewSortedSetBuilder[int](nil)
+	b.Add(1)
+	_ = b.SortedSet()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic on double SortedSet() call")
+		}
+	}()
+	_ = b.SortedSet()
 }

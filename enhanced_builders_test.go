@@ -2,6 +2,7 @@ package immutable
 
 import (
 	"fmt"
+	"maps"
 	"testing"
 )
 
@@ -277,12 +278,9 @@ func TestStreamingMapBuilder(t *testing.T) {
 
 	t.Run("Filter", func(t *testing.T) {
 		builder := NewStreamingMapBuilder[int, string](nil, 5, 0)
-		entries := []mapEntry[int, string]{
-			{1, "one"}, {2, "two"}, {3, "three"}, {4, "four"}, {5, "five"},
-		}
+		entries := map[int]string{1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
 
-		// Filter only even keys
-		builder.Filter(entries, func(k int, v string) bool { return k%2 == 0 })
+		builder.Filter(maps.All(entries), func(k int, v string) bool { return k%2 == 0 })
 		m := builder.Map()
 
 		expectedLen := 2 // keys 2 and 4
@@ -295,6 +293,41 @@ func TestStreamingMapBuilder(t *testing.T) {
 		}
 		if got, ok := m.Get(4); !ok || got != "four" {
 			t.Errorf("Expected m[4] = four, got %s (exists: %v)", got, ok)
+		}
+	})
+
+	t.Run("Stream", func(t *testing.T) {
+		builder := NewStreamingMapBuilder[string, int](nil, 3, 6)
+		entries := map[string]int{"a": 1, "b": 2, "c": 3}
+
+		builder.Stream(maps.All(entries))
+		m := builder.Map()
+
+		if m.Len() != 3 {
+			t.Errorf("Expected length 3, got %d", m.Len())
+		}
+		for k, v := range entries {
+			if got, ok := m.Get(k); !ok || got != v {
+				t.Errorf("Expected m[%s] = %d, got %d (exists: %v)", k, v, got, ok)
+			}
+		}
+	})
+
+	t.Run("Transform", func(t *testing.T) {
+		builder := NewStreamingMapBuilder[int, int](nil, 5, 0)
+		entries := map[int]int{1: 10, 2: 20, 3: 30}
+
+		builder.Transform(maps.All(entries), func(k, v int) (int, int) { return k * 10, v * 2 })
+		m := builder.Map()
+
+		if m.Len() != 3 {
+			t.Errorf("Expected length 3, got %d", m.Len())
+		}
+		expected := map[int]int{10: 20, 20: 40, 30: 60}
+		for k, v := range expected {
+			if got, ok := m.Get(k); !ok || got != v {
+				t.Errorf("Expected m[%d] = %d, got %d (exists: %v)", k, v, got, ok)
+			}
 		}
 	})
 }
@@ -406,6 +439,75 @@ func TestBatchSortedSetBuilder(t *testing.T) {
 				t.Errorf("Expected value %s at position %d, got %s", expectedOrder[i], i, value)
 			}
 			i++
+		}
+	})
+}
+
+// TestBatchMapBuilder_LastWriteWins verifies that duplicate keys in a buffer
+// resolve to the last value written, regardless of buffer size or map state.
+func TestBatchMapBuilder_LastWriteWins(t *testing.T) {
+	t.Run("SmallBuffer_EmptyMap", func(t *testing.T) {
+		builder := NewBatchMapBuilder[int, string](nil, 64)
+		builder.Set(1, "first")
+		builder.Set(2, "two")
+		builder.Set(1, "second")
+		m := builder.Map()
+		if v, _ := m.Get(1); v != "second" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "second")
+		}
+	})
+
+	t.Run("LargeBuffer_EmptyMap", func(t *testing.T) {
+		builder := NewBatchMapBuilder[int, string](nil, 64)
+		for i := 0; i < 12; i++ {
+			builder.Set(i, "first")
+		}
+		builder.Set(0, "overwrite")
+		m := builder.Map()
+		if v, _ := m.Get(0); v != "overwrite" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "overwrite")
+		}
+		if m.Len() != 12 {
+			t.Errorf("expected 12 entries, got %d", m.Len())
+		}
+	})
+
+	t.Run("SmallBuffer_NonEmptyArrayNode", func(t *testing.T) {
+		builder := NewBatchMapBuilder[int, string](nil, 64)
+		builder.Set(1, "existing")
+		builder.Flush()
+		// Now the map has a non-empty array node; flush a small buffer with dups
+		builder.Set(2, "two")
+		builder.Set(1, "updated-1")
+		builder.Set(2, "updated-2")
+		m := builder.Map()
+		if v, _ := m.Get(1); v != "updated-1" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "updated-1")
+		}
+		if v, _ := m.Get(2); v != "updated-2" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "updated-2")
+		}
+	})
+
+	t.Run("LargeBuffer_NonEmptyArrayNode", func(t *testing.T) {
+		builder := NewBatchMapBuilder[int, string](nil, 64)
+		builder.Set(1, "existing")
+		builder.Flush()
+		// Now flush a large buffer (> maxArrayMapSize=8) with duplicate keys
+		for i := 0; i < 10; i++ {
+			builder.Set(i, fmt.Sprintf("first-%d", i))
+		}
+		builder.Set(1, "overwrite-1")
+		builder.Set(5, "overwrite-5")
+		m := builder.Map()
+		if v, _ := m.Get(1); v != "overwrite-1" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "overwrite-1")
+		}
+		if v, _ := m.Get(5); v != "overwrite-5" {
+			t.Errorf("expected last-write-wins: got %q, want %q", v, "overwrite-5")
+		}
+		if v, _ := m.Get(0); v != "first-0" {
+			t.Errorf("expected non-overwritten key preserved: got %q, want %q", v, "first-0")
 		}
 	})
 }

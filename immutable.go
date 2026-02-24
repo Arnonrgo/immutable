@@ -1686,7 +1686,12 @@ func (h *reflectHasher[K]) Equal(a, b K) bool {
 }
 
 // hashUint64 returns a 32-bit hash for a 64-bit value.
-// For values that fit in 32 bits, return the lower 32 bits directly (preserves historical behavior).
+// For values that fit in 32 bits, return the lower 32 bits directly (preserves
+// historical behavior). This means sequential integer keys (0, 1, 2, …) get
+// identity hashes, which causes keys differing only in their lower 5 bits to
+// collide at the HAMT root level, producing deeper trees and more allocations.
+// Applying the finalizer unconditionally would improve distribution but would
+// break hash stability for existing users.
 // For larger values, apply a SplitMix64-style finalizer and fold to 32 bits.
 func hashUint64(value uint64) uint32 {
 	if value <= 0xffffffff {

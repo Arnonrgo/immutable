@@ -85,27 +85,41 @@ func (itr *SetIterator[T]) Next() (val T, ok bool) {
 }
 
 type SetBuilder[T any] struct {
-	s Set[T]
+	s *Set[T]
 }
 
 func NewSetBuilder[T any](hasher Hasher[T]) *SetBuilder[T] {
-	return &SetBuilder[T]{s: NewSet(hasher)}
+	s := NewSet(hasher)
+	return &SetBuilder[T]{s: &s}
 }
 
-func (s SetBuilder[T]) Set(val T) {
-	s.s.m = s.s.m.set(val, struct{}{}, true)
+// Set returns the current copy of the set and invalidates the builder.
+// The builder should not be used after this call.
+func (b *SetBuilder[T]) Set() Set[T] {
+	assert(b.s != nil, "immutable.SetBuilder.Set(): duplicate call to fetch set")
+	s := b.s
+	b.s = nil
+	return *s
 }
 
-func (s SetBuilder[T]) Delete(val T) {
-	s.s.m = s.s.m.delete(val, true)
+func (b *SetBuilder[T]) Add(val T) {
+	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
+	b.s.m = b.s.m.set(val, struct{}{}, true)
 }
 
-func (s SetBuilder[T]) Has(val T) bool {
-	return s.s.Has(val)
+func (b *SetBuilder[T]) Delete(val T) {
+	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
+	b.s.m = b.s.m.delete(val, true)
 }
 
-func (s SetBuilder[T]) Len() int {
-	return s.s.Len()
+func (b *SetBuilder[T]) Has(val T) bool {
+	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
+	return b.s.Has(val)
+}
+
+func (b *SetBuilder[T]) Len() int {
+	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
+	return b.s.Len()
 }
 
 type SortedSet[T any] struct {
@@ -217,27 +231,31 @@ func NewSortedSetBuilder[T any](comparer Comparer[T]) *SortedSetBuilder[T] {
 	return &SortedSetBuilder[T]{s: &s}
 }
 
-func (s SortedSetBuilder[T]) Set(val T) {
-	s.s.m = s.s.m.set(val, struct{}{}, true)
+func (b *SortedSetBuilder[T]) Add(val T) {
+	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
+	b.s.m = b.s.m.set(val, struct{}{}, true)
 }
 
-func (s SortedSetBuilder[T]) Delete(val T) {
-	s.s.m = s.s.m.delete(val, true)
+func (b *SortedSetBuilder[T]) Delete(val T) {
+	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
+	b.s.m = b.s.m.delete(val, true)
 }
 
-func (s SortedSetBuilder[T]) Has(val T) bool {
-	return s.s.Has(val)
+func (b *SortedSetBuilder[T]) Has(val T) bool {
+	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
+	return b.s.Has(val)
 }
 
-func (s SortedSetBuilder[T]) Len() int {
-	return s.s.Len()
+func (b *SortedSetBuilder[T]) Len() int {
+	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
+	return b.s.Len()
 }
 
-// SortedSet returns the current copy of the set.
-// The builder should not be used again after the list after this call.
-func (s SortedSetBuilder[T]) SortedSet() SortedSet[T] {
-	assert(s.s != nil, "immutable.SortedSetBuilder.SortedSet(): duplicate call to fetch sorted set")
-	set := s.s
-	s.s = nil
+// SortedSet returns the built set and invalidates the builder.
+// The builder should not be used after this call.
+func (b *SortedSetBuilder[T]) SortedSet() SortedSet[T] {
+	assert(b.s != nil, "immutable.SortedSetBuilder.SortedSet(): duplicate call to fetch sorted set")
+	set := b.s
+	b.s = nil
 	return *set
 }

@@ -21,7 +21,8 @@ func TestMap_CopyOnWriteIsolation(t *testing.T) {
 		for i := 0; i < 10000; i++ {
 			v, ok := m1.Get(0)
 			if !ok || v != 0 {
-				t.Fatalf("m1 expected key 0 => 0, got %v (ok=%v)", v, ok)
+				t.Errorf("m1 expected key 0 => 0, got %v (ok=%v)", v, ok)
+				return
 			}
 		}
 	}()
@@ -31,7 +32,8 @@ func TestMap_CopyOnWriteIsolation(t *testing.T) {
 		for i := 0; i < 10000; i++ {
 			v, ok := m2.Get(0)
 			if !ok || v != 9999 {
-				t.Fatalf("m2 expected key 0 => 9999, got %v (ok=%v)", v, ok)
+				t.Errorf("m2 expected key 0 => 9999, got %v (ok=%v)", v, ok)
+				return
 			}
 		}
 	}()
@@ -55,7 +57,8 @@ func TestMap_ConcurrentReaders(t *testing.T) {
 			for i := 0; i < 20000; i++ {
 				v, ok := m.Get(i % 10000)
 				if !ok || v != (i%10000)*2 {
-					t.Fatalf("expected %d, got %v (ok=%v)", (i%10000)*2, v, ok)
+					t.Errorf("expected %d, got %v (ok=%v)", (i%10000)*2, v, ok)
+					return
 				}
 			}
 		}()
@@ -78,7 +81,8 @@ func TestList_CopyOnWriteIsolation(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10000; i++ {
 			if v := l1.Get(0); v != 0 {
-				t.Fatalf("l1 expected index 0 => 0, got %v", v)
+				t.Errorf("l1 expected index 0 => 0, got %v", v)
+				return
 			}
 		}
 	}()
@@ -87,7 +91,8 @@ func TestList_CopyOnWriteIsolation(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 10000; i++ {
 			if v := l2.Get(0); v != 9999 {
-				t.Fatalf("l2 expected index 0 => 9999, got %v", v)
+				t.Errorf("l2 expected index 0 => 9999, got %v", v)
+				return
 			}
 		}
 	}()

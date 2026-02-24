@@ -225,7 +225,7 @@ Builders are invalid after the call to `List()`.
 
 ## Queue
 
-An immutable FIFO queue with amortized O(1) Enqueue, Dequeue, and Peek, implemented using a two-list (Okasaki) representation. Internally it reuses `List[T]` for structural sharing and uses the slice fast-path for small sizes.
+An immutable FIFO queue with amortized O(1) Enqueue, Dequeue, and Peek, implemented using the classic Okasaki two-list representation backed by cons-lists. Each operation creates at most one cons cell, and the periodic O(n) reversal is amortized across n operations.
 
 ```go
 q := immutable.NewQueue[int]()
