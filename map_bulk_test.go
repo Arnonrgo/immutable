@@ -67,20 +67,28 @@ func buildIncremental(h Hasher[int], sets []kv) *Map[int, int] {
 // and checks m.Len() against the number of entries found.
 func checkMapShape(t *testing.T, m *Map[int, int]) {
 	t.Helper()
+	checkMapShapeOpt(t, m, true)
+}
+
+// checkMapShapeOpt is checkMapShape; collapsed says whether a branch with a
+// single value child is an error. Bulk builds never make one, but Delete leaves
+// them behind, so a map that has seen deletes is checked with collapsed false.
+func checkMapShapeOpt(t *testing.T, m *Map[int, int], collapsed bool) {
+	t.Helper()
 	if m.root == nil {
 		if m.Len() != 0 {
 			t.Fatalf("nil root but Len() = %d", m.Len())
 		}
 		return
 	}
-	if got := checkMapNode(t, m.root, 0, 0, m.hasher, true); got != m.Len() {
+	if got := checkMapNode(t, m.root, 0, 0, m.hasher, true, collapsed); got != m.Len() {
 		t.Fatalf("trie holds %d entries but Len() = %d", got, m.Len())
 	}
 }
 
 // checkMapNode returns the number of entries under n. prefix holds the hash
 // segments chosen on the way down, in the bits below shift.
-func checkMapNode(t *testing.T, n mapNode[int, int], shift uint, prefix uint32, h Hasher[int], root bool) int {
+func checkMapNode(t *testing.T, n mapNode[int, int], shift uint, prefix uint32, h Hasher[int], root, collapsed bool) int {
 	t.Helper()
 	atPrefix := func(hash uint32) bool {
 		return shift >= 32 || hash&(1<<shift-1) == prefix
@@ -95,6 +103,9 @@ func checkMapNode(t *testing.T, n mapNode[int, int], shift uint, prefix uint32, 
 		}
 		seen := map[int]bool{}
 		for _, e := range n.entries {
+			if h.Hash(e.key) != e.keyHash {
+				t.Fatalf("array node entry for key %d stores hash %#x, hasher gives %#x", e.key, e.keyHash, h.Hash(e.key))
+			}
 			if seen[e.key] {
 				t.Fatalf("array node repeats key %d", e.key)
 			}
@@ -144,14 +155,14 @@ func checkMapNode(t *testing.T, n mapNode[int, int], shift uint, prefix uint32, 
 			}
 			child := n.nodes[i]
 			i++
-			if len(n.nodes) == 1 {
+			if collapsed && len(n.nodes) == 1 {
 				switch child.(type) {
 				case *mapBitmapIndexedNode[int, int], *mapHashArrayNode[int, int]:
 				default:
 					t.Fatalf("single-child bitmap node holds a %T, which should have been placed directly", child)
 				}
 			}
-			total += checkMapNode(t, child, shift+mapNodeBits, prefix|seg<<shift, h, false)
+			total += checkMapNode(t, child, shift+mapNodeBits, prefix|seg<<shift, h, false, collapsed)
 		}
 		return total
 	case *mapHashArrayNode[int, int]:
@@ -164,7 +175,7 @@ func checkMapNode(t *testing.T, n mapNode[int, int], shift uint, prefix uint32, 
 				continue
 			}
 			set++
-			total += checkMapNode(t, child, shift+mapNodeBits, prefix|uint32(seg)<<shift, h, false)
+			total += checkMapNode(t, child, shift+mapNodeBits, prefix|uint32(seg)<<shift, h, false, collapsed)
 		}
 		if uint(set) != n.count {
 			t.Fatalf("hash array node count %d, but %d children are set", n.count, set)
@@ -195,10 +206,21 @@ func sameMapShape(a, b mapNode[int, int]) bool {
 		}
 		return true
 	}
+	sameArrayEntries := func(x, y []mapArrayEntry[int, int]) bool {
+		if len(x) != len(y) {
+			return false
+		}
+		for _, e := range x {
+			if !slices.Contains(y, e) {
+				return false
+			}
+		}
+		return true
+	}
 	switch a := a.(type) {
 	case *mapArrayNode[int, int]:
 		b, ok := b.(*mapArrayNode[int, int])
-		return ok && sameEntries(a.entries, b.entries)
+		return ok && sameArrayEntries(a.entries, b.entries)
 	case *mapValueNode[int, int]:
 		b, ok := b.(*mapValueNode[int, int])
 		return ok && *a == *b
@@ -651,4 +673,124 @@ func TestBatchMapBuilderLifecycle(t *testing.T) {
 			t.Fatalf("Len() = %d, want 10", got)
 		}
 	})
+}
+
+// TestMapShapeUnderRandomSets applies random Set and Delete calls over a small
+// key range, which keeps the map crossing the array-node limit (8 entries) in
+// both directions, to a persistent map and to a MapBuilder. After every call the
+// trie must keep its structural rules (including that an array node stores the
+// hash of each key) and agree with a Go map.
+func TestMapShapeUnderRandomSets(t *testing.T) {
+	hashers := map[string]func() Hasher[int]{
+		"default":  func() Hasher[int] { return nil },
+		"collide3": func() Hasher[int] { return modHasher{3} },
+		"collide1": func() Hasher[int] { return modHasher{1} },
+		"high":     func() Hasher[int] { return shiftHasher{27} },
+	}
+	for name, mk := range hashers {
+		t.Run(name, func(t *testing.T) {
+			rng := splitmix(len(name))
+			m := NewMap[int, int](mk())
+			b := NewMapBuilder[int, int](mk())
+			want := map[int]int{}
+			for step := 0; step < 3000; step++ {
+				k, v := rng.intn(24), rng.intn(1000)
+				if rng.intn(3) == 0 {
+					m = m.Delete(k)
+					b.Delete(k)
+					delete(want, k)
+				} else {
+					m = m.Set(k, v)
+					b.Set(k, v)
+					want[k] = v
+				}
+				checkMapShapeOpt(t, m, false) // Delete leaves single-child branches
+				checkMapShapeOpt(t, b.m, false)
+				if m.Len() != len(want) || b.Len() != len(want) {
+					t.Fatalf("step %d: Len() = %d (builder %d), want %d", step, m.Len(), b.Len(), len(want))
+				}
+			}
+			requireMapEquals(t, m, want)
+			requireMapEquals(t, b.m, want)
+		})
+	}
+}
+
+// countingHasher hashes an int to itself and counts its calls.
+type countingHasher struct{ hashes, equals int }
+
+func (h *countingHasher) Hash(k int) uint32 { h.hashes++; return uint32(k) }
+func (h *countingHasher) Equal(a, b int) bool {
+	h.equals++
+	return a == b
+}
+
+// TestMapArrayNodeHashesOnce pins what 5.1 and 5.2 bought. A small map keeps the
+// hash of each entry, so a lookup compares hashes first and calls Equal only on
+// a match, and growing past the array limit moves the entries into the trie
+// with the stored hashes instead of hashing every key again.
+func TestMapArrayNodeHashesOnce(t *testing.T) {
+	h := &countingHasher{}
+	m := NewMap[int, int](h)
+	for i := 0; i < maxArrayMapSize; i++ {
+		before := h.hashes
+		m = m.Set(i, i)
+		if got := h.hashes - before; got != 1 {
+			t.Fatalf("Set #%d hashed %d times, want 1", i+1, got)
+		}
+	}
+	if _, ok := m.root.(*mapArrayNode[int, int]); !ok {
+		t.Fatalf("a map of %d entries is a %T, want an array node", m.Len(), m.root)
+	}
+
+	// The next Set is the one that leaves the array node.
+	h.hashes, h.equals = 0, 0
+	m = m.Set(maxArrayMapSize, 0)
+	if _, ok := m.root.(*mapArrayNode[int, int]); ok {
+		t.Fatalf("a map of %d entries is still an array node", m.Len())
+	}
+	if h.hashes != 1 {
+		t.Errorf("the Set that expands the array node hashed %d times, want 1 (the new key)", h.hashes)
+	}
+	checkMapShape(t, m)
+
+	// Lookups in an array node: one hash, and Equal only for the entry whose hash
+	// matches.
+	small := NewMap[int, int](h)
+	for i := 0; i < maxArrayMapSize; i++ {
+		small = small.Set(100+i, i)
+	}
+	h.hashes, h.equals = 0, 0
+	if v, ok := small.Get(103); !ok || v != 3 {
+		t.Fatalf("Get(103) = %d, %v, want 3, true", v, ok)
+	}
+	if h.hashes != 1 || h.equals != 1 {
+		t.Errorf("Get of a present key: %d Hash and %d Equal calls, want 1 and 1", h.hashes, h.equals)
+	}
+	h.hashes, h.equals = 0, 0
+	if _, ok := small.Get(7); ok {
+		t.Fatal("Get(7) found a key that is not in the map")
+	}
+	if h.hashes != 1 || h.equals != 0 {
+		t.Errorf("Get of an absent key: %d Hash and %d Equal calls, want 1 and 0 (no hash matches)", h.hashes, h.equals)
+	}
+	h.hashes, h.equals = 0, 0
+	sinkAny = small.Delete(7)
+	if h.hashes != 1 || h.equals != 0 {
+		t.Errorf("Delete of an absent key: %d Hash and %d Equal calls, want 1 and 0", h.hashes, h.equals)
+	}
+
+	// Expansion builds the trie in place: the persistent path copy for each of the
+	// eight entries would cost several times this many allocations. An ordinary
+	// Set into a small map costs 4 (see the first loop below).
+	full := NewMap[int, int](nil)
+	for i := 0; i < maxArrayMapSize; i++ {
+		if got := testing.AllocsPerRun(20, func() { sinkAny = full.Set(-1, 1) }); got > 4 {
+			t.Errorf("Set into a map of %d entries: %v allocs, want at most 4", i, got)
+		}
+		full = full.Set(i*1000003+7, i)
+	}
+	if got := testing.AllocsPerRun(20, func() { sinkAny = full.Set(-1, 1) }); got > 17 {
+		t.Errorf("the Set that expands an array node: %v allocs, want at most 17", got)
+	}
 }

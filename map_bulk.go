@@ -69,12 +69,13 @@ func buildMapRoot[K, V any](entries []mapEntry[K, V], hasher Hasher[K]) (root ma
 // maxArrayMapSize distinct keys. Keys stay in first-set order and the last
 // value for a key wins.
 func buildMapArray[K, V any](entries []mapEntry[K, V], hasher Hasher[K]) (mapNode[K, V], int) {
-	arr := &mapArrayNode[K, V]{entries: make([]mapEntry[K, V], 0, min(len(entries), maxArrayMapSize))}
+	arr := &mapArrayNode[K, V]{entries: make([]mapArrayEntry[K, V], 0, min(len(entries), maxArrayMapSize))}
 	for _, e := range entries {
-		if i := arr.indexOf(e.key, hasher); i >= 0 {
+		keyHash := hasher.Hash(e.key)
+		if i := arr.indexOf(e.key, keyHash, hasher); i >= 0 {
 			arr.entries[i].value = e.value
 		} else {
-			arr.entries = append(arr.entries, e)
+			arr.entries = append(arr.entries, mapArrayEntry[K, V]{keyHash: keyHash, key: e.key, value: e.value})
 		}
 	}
 	return arr, len(arr.entries)

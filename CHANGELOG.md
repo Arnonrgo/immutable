@@ -182,6 +182,21 @@ Changes since v0.6.0.
   path now has one entry per trie level instead of a fixed 32). `Contains` and
   `ContainsFunc` scan a leaf at a time and are 2.3-3.2x faster on lists with a
   trie. Values, order and behavior are unchanged.
+- **Small `Map`s are faster to read and to grow.** A map of up to 8 entries now
+  stores the hash of each key, so `Get` compares hashes first and calls the
+  hasher's `Equal` only on a match: `Get` of a present key is 1.3-1.9x faster
+  with `int` keys and 1.5-2.5x faster with `string` keys at 4 to 8 entries. The
+  `Set` that takes a map from 8 to 9 entries builds the trie from the stored
+  hashes instead of hashing every key again, and builds it in place: building a
+  map of 9 entries is 1.37x faster with 18% fewer allocations (61 to 50). The
+  same hash-first compare is used inside the trie, where it saves one `Equal`
+  call per lookup but is level in time (large-map `Get`, `Set` and `Delete`
+  measured at 1,000 to 100,000 entries). The costs: each entry of a map of up to
+  8 entries is 8 bytes larger (a map of 4 entries takes 18% more bytes, of 8
+  entries 26% more), and the first `Set` into an empty map now hashes its key,
+  so a map of one entry takes about 8-10% longer to build (and `Get` on it
+  measured about 1 ns slower, within the noise). Values, order and behavior are
+  unchanged.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
   loop makes) turns the list around once and keeps the result, so reading the

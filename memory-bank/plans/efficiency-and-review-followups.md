@@ -180,8 +180,13 @@ Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
 
 ## Phase 5: Map hot path
 
-- [ ] 5.1 In `mapValueNode.get` and the collision paths, compare the stored `keyHash` first and call `Equal` only on a hash match.
-- [ ] 5.2 Store the key hash in array nodes and entries, so expansion at `immutable.go:308-314` doesn't rehash.
+- [x] 5.1 In `mapValueNode.get` and the collision paths, compare the stored `keyHash` first and call `Equal` only on a hash match.
+  - Status 2026-11-17: done for `mapValueNode.get/set/delete` and `mapHashCollisionNode.get/delete`, and for array entries (5.2).
+- [x] 5.2 Store the key hash in array nodes and entries, so expansion at `immutable.go:308-314` doesn't rehash.
+  - Status 2026-11-17: done. The root array node holds `[]mapArrayEntry{keyHash, key, value}`; `indexOf` compares the hash first; `expand` moves the entries into the trie with the stored hashes and a mutable `set` (no rehash, no path copy per entry); `buildMapArray` stores hashes for the bulk builders.
+  - Measured (interleaved A/B; `memory-bank/reports/bench-phase5-1-2-map-hashfirst-ab-2026-11-17.txt`): `Get` of a present key on 4 to 8 entries 1.3-1.9x faster (int) and 1.5-2.5x (string); building 9 entries 1.37x faster with 61 to 50 allocs; large-map `Get`/`Set`/`Delete` and whole-map builds level (0.93-1.11x, no pattern). Hash-first alone does not help large maps, where the cost is the trie walk, not `Equal`. Costs: +8 B per array entry (a map of 8 int entries +26% bytes), and the first `Set` into an empty map hashes its key (one-entry map 8-10% slower to build).
+  - Tests: `TestMapArrayNodeHashesOnce` (hash and `Equal` call counts, allocation ceilings 4 and 17), the stored-hash check in `checkMapNode`, `TestMapShapeUnderRandomSets` (random Set/Delete across the 8-entry limit, four hashers, persistent and builder). 14 mutants, all killed; the mutable-versus-persistent `expand` mutant is behaviorally identical and is killed only by the allocation ceiling. Found: persistent `Delete` does not collapse a bitmap node left with one child (pre-existing, not changed); the shape check takes a `collapsed` flag for it.
+  - Not done: the `resized *bool` argument still escapes to the heap (one allocation per `Set`); returning `(node, resized)` is a follow-up with 5.5.
 - [ ] 5.3 Hash quality (ints and strings are separate problems):
   - Ints: replace the identity `hashUint64` for values that fit in 32 bits with the SplitMix64-style finalizer the code already uses above 32 bits. Confirm with the sequential-vs-random benchmark (sequential is about 24% slower today).
   - Strings, default hasher (stays deterministic). Scratch benchmark in `/tmp/hashbench` (M-series arm64, mean ns/op, string keys of 8 / 16 / 64 / 1024 bytes; speed only, one repeated-byte string, distribution not measured):

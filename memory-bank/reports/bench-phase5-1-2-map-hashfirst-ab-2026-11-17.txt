@@ -1,0 +1,85 @@
+Phase 5.1 + 5.2: hash-first compare, and array nodes that store the key hash, back-to-back A/B
+=============================================================================================
+toolchain: go1.27.4 darwin/arm64
+date: 2026-11-17
+load: average 220-260 on 10 cores (heavily loaded), so only interleaved
+      comparisons are used (alternating old, new, new, old, ...). Every time is the
+      minimum over 5 rounds of 100 ms. Allocation counts and bytes are exact
+      (they do not depend on load).
+
+Change
+  5.1  mapValueNode.get/set/delete and the collision node paths compare the stored
+       keyHash first and call Hasher.Equal only when the hashes match. Before,
+       get and delete called Equal on every value node they reached, and for
+       string keys Equal is a string comparison.
+  5.2  The root array node (a map of at most maxArrayMapSize = 8 entries) keeps
+       each entry's hash: mapArrayEntry{keyHash uint32; key K; value V}. Lookups
+       in it compare hashes first. The 9th Set builds the trie from the stored
+       hashes, mutating the nodes it has just made, instead of hashing all 8 keys
+       again and copying a path for each (persistent set).
+
+Method
+  OLD = 3ae6bf2 (HEAD) in a detached worktree plus the new Baseline_Map_GetMiss,
+  Baseline_MapString_GetMiss, Baseline_MapString_SetOne and Baseline_Map_Small
+  benchmarks. NEW = working tree. Binaries built with `go test -c`, run
+  alternately by /tmp/ab_queue.py.
+
+Result: small maps (rows from Baseline_Map_Small)
+  GetHit, 4 entries:  int 14.4 -> 11.4 ns (1.27x), string 22.4 -> 14.9 ns (1.50x)
+  GetHit, 8 entries:  int 23.5 -> 12.6 ns (1.87x), string 38.9 -> 15.6 ns (2.49x)
+  GetHit, 9 and 16 entries (a trie, not an array node): level (0.95-1.01x)
+  SetLoop of 9 entries (the expansion):
+      int    1,234 -> 900 ns (1.37x), 2,400 -> 2,105 B, 61 -> 50 allocs
+      string 1,541 -> 1,126 ns (1.37x), 2,816 -> 2,633 B, 59 -> 49 allocs
+  SetLoop of 16 entries: 1.13x (int), 1.18x (string); allocs 106 -> 95, 94 -> 84
+  SetLoop of 8 entries, string: 1.28x; int: level (1.00x)
+
+Result: what it costs
+  An array entry is 8 bytes larger (the hash plus alignment), so building a map
+  of 4 entries takes 499 -> 587 B (+18%) and of 8 entries 1,207 -> 1,519 B
+  (+26%) for int keys (string keys: 587 -> 659 and 1,519 -> 1,783).
+  The first Set into an empty map now hashes the key (the array node used to
+  need no hash for it): a map of one entry takes 51.8 -> 56.2 ns (int, 0.92x),
+  60.3 -> 67.5 ns (string, 0.89x) and 136 -> 144 B. GetHit on a one-entry map
+  is 0.89x (int) and 0.94x (string), about 1 ns, which is inside the noise at
+  this load but points the same way.
+
+Result: large maps (100 to 100,000 entries), single operations
+  Get, GetMiss, SetOne, DeleteOne, int and string keys: level. Every ratio is
+  between 0.93x and 1.09x with no pattern across sizes; bytes and allocations are
+  identical. Hash-first saves one Equal call per lookup, but the cost of a lookup
+  is the walk down the trie (cache misses), not the key comparison, and for int
+  keys Equal is one compare.
+
+Result: building whole maps (Set loop, MapBuilder, BatchMapBuilder; int and string
+keys; 1,000 to 100,000 entries)
+  0.93x to 1.11x, scatter without a pattern. Allocations drop by 10 per map (the
+  one expansion) and bytes by 0.1% at most.
+
+Exact allocations of one persistent Set of a new key (testing.AllocsPerRun)
+  map of 1, 4 or 7 entries: 4   map of 8 entries (the expansion): 17
+  existing key in a map of 8 entries: 4
+  The test TestMapArrayNodeHashesOnce pins the 4 and a ceiling of 17.
+
+Tests added
+  - TestMapArrayNodeHashesOnce: the 9th Set calls Hash once (not 9 times); Get of
+    a present key is 1 Hash + 1 Equal; Get and Delete of an absent key are 1 Hash
+    + 0 Equal; allocation ceilings above.
+  - checkMapNode: an array node's stored hash equals Hash(key) for every entry.
+  - TestMapShapeUnderRandomSets: 3,000 random Set/Delete calls over 24 keys for
+    four hashers (default, collide3, collide1, high bits), on a persistent map and
+    on a MapBuilder, checking the shape rules after every call. The map keeps
+    crossing the 8-entry limit in both directions.
+
+Mutation testing (/tmp/mutate_map.py, 14 mutants on the changed code)
+  Array entry stores hash 0 (persistent and first entry), inverted hash checks in
+  valueNode get/set/delete and collision get/delete, Equal ignored on a hash
+  match, expand skipping an entry, expand with a stale hash, expand with a
+  persistent instead of a mutable set, and others: 14 of 14 killed. The mutable
+  versus persistent expand mutant behaves identically (the result is the same
+  map), so only the allocation ceiling in TestMapArrayNodeHashesOnce kills it.
+
+Not done here
+  The big per-Set costs are unchanged: path copying (about 1.9 KB and 8 allocs for
+  one Set into 100,000 entries) and the `resized *bool` that escapes to the heap
+  (one allocation per Set). Those are for 5.5 and a follow-up.

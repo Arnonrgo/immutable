@@ -2,6 +2,7 @@ package immutable
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -387,6 +388,134 @@ func BenchmarkBaseline_Map_DeleteOne(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+// BenchmarkBaseline_Map_GetMiss measures one Get of a key that is not in a
+// full-size map: the lookup walks to a value node that holds a different key.
+func BenchmarkBaseline_Map_GetMiss(b *testing.B) {
+	for _, pattern := range []string{"seq", "rand"} {
+		for _, n := range benchBaselineSizes {
+			b.Run(fmt.Sprintf("%s/N%d", pattern, n), func(b *testing.B) {
+				keys := benchIntKeys(2*n, pattern == "rand")
+				builder := NewMapBuilder[int, int](nil)
+				for j := 0; j < n; j++ {
+					builder.Set(keys[j], j)
+				}
+				m := builder.Map()
+				missing := keys[n:] // keys not in the map
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					sinkInt, sinkBool = m.Get(missing[i%n])
+				}
+			})
+		}
+	}
+}
+
+// benchStringMisses returns n string keys that are never in a map built from
+// benchStringKeys.
+func benchStringMisses(n int) []string {
+	keys := make([]string, n)
+	for i := range keys {
+		keys[i] = "miss-" + strconv.Itoa(i)
+	}
+	return keys
+}
+
+// BenchmarkBaseline_MapString_GetMiss measures one Get of a string key that is
+// not in a full-size map.
+func BenchmarkBaseline_MapString_GetMiss(b *testing.B) {
+	for _, n := range benchBaselineSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			builder := NewMapBuilder[string, int](nil)
+			for j, k := range benchStringKeys(n) {
+				builder.Set(k, j)
+			}
+			m := builder.Map()
+			missing := benchStringMisses(n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt, sinkBool = m.Get(missing[i%n])
+			}
+		})
+	}
+}
+
+// BenchmarkBaseline_MapString_SetOne measures one persistent Set of a new
+// string key into a full-size map. The result is discarded.
+func BenchmarkBaseline_MapString_SetOne(b *testing.B) {
+	for _, n := range benchBaselineSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			builder := NewMapBuilder[string, int](nil)
+			for j, k := range benchStringKeys(n) {
+				builder.Set(k, j)
+			}
+			m := builder.Map()
+			missing := benchStringMisses(n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkAny = m.Set(missing[i%n], i)
+			}
+		})
+	}
+}
+
+// benchSmallMapSizes straddle maxArrayMapSize (8), where a map changes from one
+// array node to a trie and every entry is hashed again.
+var benchSmallMapSizes = []int{1, 4, 8, 9, 16}
+
+// BenchmarkBaseline_Map_Small builds, reads and extends short maps: the
+// many-small-maps case, with int and string keys.
+func BenchmarkBaseline_Map_Small(b *testing.B) {
+	for _, n := range benchSmallMapSizes {
+		ints := benchIntKeys(n, true)
+		strs := benchStringKeys(n)
+		b.Run(fmt.Sprintf("SetLoop/int/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				m := NewMap[int, int](nil)
+				for j, k := range ints {
+					m = m.Set(k, j)
+				}
+				sinkAny = m
+			}
+		})
+		b.Run(fmt.Sprintf("SetLoop/string/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				m := NewMap[string, int](nil)
+				for j, k := range strs {
+					m = m.Set(k, j)
+				}
+				sinkAny = m
+			}
+		})
+		b.Run(fmt.Sprintf("GetHit/int/N%d", n), func(b *testing.B) {
+			m := NewMap[int, int](nil)
+			for j, k := range ints {
+				m = m.Set(k, j)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt, sinkBool = m.Get(ints[i%n])
+			}
+		})
+		b.Run(fmt.Sprintf("GetHit/string/N%d", n), func(b *testing.B) {
+			m := NewMap[string, int](nil)
+			for j, k := range strs {
+				m = m.Set(k, j)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt, sinkBool = m.Get(strs[i%n])
+			}
+		})
 	}
 }
 
