@@ -1674,13 +1674,14 @@ func NewHasher[K any](key K) Hasher[K] {
 	panic(fmt.Sprintf("immutable.NewHasher: must set hasher for %T type", key))
 }
 
-// Hash returns a hash for value.
+// hashString returns a 32-bit hash for value: rapidhash (rapidhash.go) folded
+// from 64 to 32 bits. It replaces the polynomial hash 31*h + c, which gave
+// "Aa" and "BB" (and every string built from them) the same hash. The result is
+// the same in every process and on every platform, so map iteration order is
+// reproducible.
 func hashString(value string) uint32 {
-	var hash uint32
-	for i, value := 0, value; i < len(value); i++ {
-		hash = 31*hash + uint32(value[i])
-	}
-	return hash
+	h := rapidHash(value)
+	return uint32(h) ^ uint32(h>>32)
 }
 
 // reflectIntHasher implements a reflection-based Hasher for keys.
@@ -1694,12 +1695,7 @@ func (h *reflectHasher[K]) Hash(key K) uint32 {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return hashUint64(reflect.ValueOf(key).Uint())
 	case reflect.String:
-		var hash uint32
-		s := reflect.ValueOf(key).String()
-		for i := 0; i < len(s); i++ {
-			hash = 31*hash + uint32(s[i])
-		}
-		return hash
+		return hashString(reflect.ValueOf(key).String())
 	}
 	panic(fmt.Sprintf("immutable.reflectHasher.Hash: reflectHasher does not support %T type", key))
 }

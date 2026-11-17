@@ -7,31 +7,31 @@ import "testing"
 // nodes there are.
 type mapTrieStats struct{ values, nodes, maxDepth, collisions int }
 
-func trieStats(m *Map[int, int]) mapTrieStats {
+func trieStats[K, V any](m *Map[K, V]) mapTrieStats {
 	var s mapTrieStats
-	var walk func(n mapNode[int, int], depth int)
-	walk = func(n mapNode[int, int], depth int) {
+	var walk func(n mapNode[K, V], depth int)
+	walk = func(n mapNode[K, V], depth int) {
 		switch n := n.(type) {
-		case *mapValueNode[int, int]:
+		case *mapValueNode[K, V]:
 			s.values++
 			s.maxDepth = max(s.maxDepth, depth)
-		case *mapHashCollisionNode[int, int]:
+		case *mapHashCollisionNode[K, V]:
 			s.collisions++
 			s.values += len(n.entries)
 			s.maxDepth = max(s.maxDepth, depth)
-		case *mapBitmapIndexedNode[int, int]:
+		case *mapBitmapIndexedNode[K, V]:
 			s.nodes++
 			for _, c := range n.nodes {
 				walk(c, depth+1)
 			}
-		case *mapHashArrayNode[int, int]:
+		case *mapHashArrayNode[K, V]:
 			s.nodes++
 			for _, c := range n.nodes {
 				if c != nil {
 					walk(c, depth+1)
 				}
 			}
-		case *mapArrayNode[int, int]:
+		case *mapArrayNode[K, V]:
 			s.values += len(n.entries)
 		}
 	}

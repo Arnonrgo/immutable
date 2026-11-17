@@ -1743,15 +1743,15 @@ func ExampleMap_Iterator() {
 		fmt.Println(k, v)
 	}
 	// Output:
-	// mango 400
-	// pear 700
-	// pineapple 800
 	// grape 200
-	// orange 500
 	// strawberry 900
-	// kiwi 300
-	// peach 600
+	// pineapple 800
 	// apple 100
+	// peach 600
+	// kiwi 300
+	// pear 700
+	// mango 400
+	// orange 500
 }
 
 func ExampleMapBuilder_Set() {

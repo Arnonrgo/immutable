@@ -197,6 +197,25 @@ Changes since v0.6.0.
   so a map of one entry takes about 8-10% longer to build (and `Get` on it
   measured about 1 ns slower, within the noise). Values, order and behavior are
   unchanged.
+- **The default hash for `string` keys is rapidhash, so the iteration order of
+  string-keyed `Map`s and `Set`s changes once, when you upgrade.** The old hash
+  (`31*h + c`) gave `"Aa"` and `"BB"` the same value, and so every string made by
+  joining them: 1,024 such strings shared one hash and one linearly scanned
+  collision node. rapidhash (a port of `go.dw1.io/rapidhash` v0.3.0 in
+  `rapidhash.go`, MIT, no new dependency, no `unsafe`) gives them distinct hashes
+  and spreads real keys like a random 32-bit hash (about 1.2 full-hash collisions
+  per 100,000 keys). The order is still the same on every run and platform, but a
+  test or example that prints a string-keyed map in iteration order needs new
+  expected output. The hash itself is 1.7x faster for 8-byte keys, 2.9x for 16 bytes,
+  6.6x for 64 bytes and 16x for 1 KB, and 36-byte uuid-like keys read 1.4-2.1x
+  faster in a `Map` (the larger key sizes were not measured in a `Map`).
+  Short, dense keys such as `"key-1"`, `"key-2"` are about 15-25% slower to read at
+  1,000 entries, because the old hash gave consecutive keys consecutive hashes
+  and a compact trie; they are level to slightly faster at 10,000 and 100,000
+  entries when read in random order. `reflect`-based hashing of named string types
+  uses the same function. The default hasher is still deterministic and not
+  resistant to hash flooding; use a custom seeded `Hasher` for keys an attacker
+  controls.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
   loop makes) turns the list around once and keeps the result, so reading the

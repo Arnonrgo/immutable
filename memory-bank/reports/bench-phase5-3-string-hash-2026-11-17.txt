@@ -1,0 +1,130 @@
+Phase 5.3 (strings): replace the polynomial string hash (31*h + c) with rapidhash
+===================================================================================
+toolchain: go1.27.4 darwin/arm64 (Apple M1 Pro)
+date: 2026-11-17
+load: average 85-260 on 10 cores (heavily loaded). Counts (collisions, nodes, depth,
+      B/op, allocs/op) are exact. Times are the minimum of 5-7 runs of 100 ms, old and
+      new interleaved; ratios under about 1.5x on reads are not reliable at this load.
+
+Decision
+  Adopted: hashString is rapidhash V3 (seed 0, rapidhash.go) folded to 32 bits with
+  uint32(h) ^ uint32(h>>32). The reflection fallback for named string types uses the
+  same function. The reason is robustness and long-key speed, not typical-case
+  quality: on sequential counter keys the old hash was already as good, and on very
+  short counter keys the old hash is a little faster to read (see below).
+
+The port
+  rapidhash.go is a pure-Go port of go.dw1.io/rapidhash v0.3.0 (commit 3b3fd64,
+  MIT, header kept in the file) for strings: explicit little-endian loads instead of
+  unsafe reads, so no unsafe import and the same value on every platform. Inputs over
+  448 bytes use the portable 7-lane loop instead of the upstream amd64 assembly (same
+  value, slower; see "hash alone").
+  Verified against upstream: 40,008 random inputs of 0 to 5,000 bytes, 0 mismatches
+  (throwaway differential module, not in the repo). The repo test pins 73 upstream
+  values at the lengths that exercise every branch (TestRapidHashMatchesUpstream) and
+  7 folded 32-bit values of real strings (TestDefaultStringHashIsStable).
+
+Quality (TestDefaultStringHashSpreadsRealisticKeys; 100,000 keys per set; a random
+32-bit hash gives about 1.2 full-hash collisions)
+  keys          full-hash collisions        nodes (rapid / poly)   max depth (rapid / poly)
+                rapidhash   polynomial
+  key<N>              3          0                32120 / 29648           7 / 5
+  uuid                0          3                32269 / 32202           7 / 7
+  path                1          1                32202 / 32031           7 / 7
+  short (60k)         0          0                20660 / 20451           6 / 6
+  The polynomial hash is as good as a random hash on uuids, paths and short hex
+  words, and better on counters ("key1".."key100000": consecutive keys get
+  consecutive hashes, like identity for ints: 29.6k nodes, depth 5, against 32.1k
+  nodes, depth 7 for a random hash). Its weakness is structure, not typical data:
+    "Aa" and "BB" have the same polynomial hash (65*31+97 = 66*31+66), so all 1,024
+    strings made by joining ten of them share one hash: one collision node holding
+    1,024 entries, scanned linearly on every Get. rapidhash gives 1,024 distinct hashes,
+    no collision node, depth at most 4 (TestDefaultStringHashSeparatesPolynomialCollisions).
+  Every byte of inputs of 26 lengths (1 to 449) changes the hash, bit by bit
+  (TestRapidHashReadsEveryByte), so no byte is skipped by the overlapping tail reads.
+
+The hash alone (BenchmarkHashString, ns per call, minimum of 5)
+  size     polynomial    rapidhash   rapid/poly
+  8 B            4.04         2.33        0.58x
+  16 B           6.73         2.33        0.35x
+  64 B          41.5          6.25        0.15x
+  1 KB         995           61.5         0.06x
+  The 1 KB figure is the portable loop; the upstream assembly measured 38.5 ns in the
+  scratch benchmark on this machine, so keys over 448 bytes are about 1.6x slower
+  than the library would be. Not worth a dependency and an unsafe import for.
+
+Map benchmarks, repo benchmarks, old binary (a04b1cd) against new, interleaved, 6 rounds
+  benchmark                               old ns     new ns   old/new   B/op old->new   allocs old->new
+  MapString_Get/N1000                       27.1       33.3     0.81x   0 -> 0          0 -> 0
+  MapString_Get/N10000                      33.2       36.5     0.91x
+  MapString_Get/N100000                     47.6      102.5     0.46x
+  MapString_GetMiss/N1000                   18.7       25.1     0.75x
+  MapString_GetMiss/N10000                  26.6       20.8     1.28x
+  MapString_GetMiss/N100000                 28.6       61.7     0.46x
+  MapString_Set/N1000                     354737     291285     1.22x   892610 -> 902466   7394 -> 6759
+  MapString_Set/N10000                  17860470    8932650     2.00x   13.04M -> 13.08M   79864 -> 72358
+  MapString_Set/N100000                102821084   95242479     1.08x   164.8M -> 171.8M   862661 -> 798378
+  MapString_SetOne/N1000                     453        365     1.24x   1026 -> 1067       7 -> 7
+  MapString_SetOne/N10000                    970        901     1.08x   1448 -> 1431       8 -> 7
+  MapString_SetOne/N100000                   932       1081     0.86x   1826 -> 1905       8 -> 8
+  MapString_Builder/N1000                  75756      84830     0.89x   89616 -> 89873     2902 -> 2838
+  MapString_Builder/N10000               1175234    1115732     1.05x   875920 -> 854574   29645 -> 27451
+  MapString_Builder/N100000             12395754   17859049     0.69x   8.65M -> 8.87M     290014 -> 294384
+
+  The N100000 Get and GetMiss rows (0.46x) are an artifact of the benchmark, not of the
+  hash. The benchmark reads "key-0", "key-1", ... in creation order. The polynomial
+  hash maps consecutive keys to nearby hashes, so each lookup follows the trie path
+  the last one just touched and stays in cache; a hash that spreads keys cannot do that.
+  Real lookups rarely arrive in key order. With the same keys read in a random order
+  (new benchmark BenchmarkBaseline_MapString_GetShuffled, 7 rounds):
+    GetShuffled/N1000     26.7 -> 31.3 ns   0.85x
+    GetShuffled/N10000    45.1 -> 37.5 ns   1.20x
+    GetShuffled/N100000  147.3 -> 129.1 ns  1.14x
+  i.e. level within the noise of this machine. The N100000 Builder row (0.69x) is the
+  same locality effect for inserts in key order, not shown to be anything else. The
+  Set rows, which also insert in key order, went the other way (1.08x to 2.0x faster,
+  allocations 7-13% fewer, B/op +0.4% to +4.2%), so the Builder rows disagree with them
+  and these numbers do not settle whether builds of 100,000 counter keys changed.
+
+Same trie code, only the hasher differs (throwaway benchmark, deleted; both hashers
+as custom Hasher[string], 5 runs of 100 ms; "poly/rapid" = polynomial time over
+rapidhash time, above 1 means rapidhash is faster)
+  keys               op                  N=1000                 N=100000
+                                         poly   rapid  poly/rapid   poly   rapid  poly/rapid
+  counter (key-N)    Get, key order      22.3   30.1   0.74x        40.2   77.7   0.52x
+                     Get, random order   25.3   31.6   0.80x        149    115    1.30x
+                     Build, key order    79.6us 91.6us 0.87x
+                     Build, random order 93.5us 87.1us 1.07x
+  uuid (36 B)        Get, key order      58.2   33.3   1.75x        117    75.1   1.56x
+                     Get, random order   58.1   34.4   1.69x        200    145    1.37x
+                     Get miss            60.0   29.1   2.06x        102    72.8   1.41x
+                     Build, key order    106us  79.4us 1.33x
+                     Build, random order 112us  83.4us 1.34x
+  (The counter miss rows were read in key order and are omitted: the same locality effect.)
+  Counter keys at 1,000 entries take about 25% longer to read with rapidhash even in
+  random order (0.80x; the repo's shuffled benchmark gives 0.85x). The likely cause is
+  trie shape: dense consecutive hashes pack the keys into a shallow trie, a random hash
+  gives one with more levels, the same effect as identity against a finalizer for dense
+  ints (bench-phase5-3-int-hash-2026-11-17.txt). I did not measure the depth of this
+  trie, so this is an inference. Keys of 16 bytes or more hash faster with
+  rapidhash; 36-byte uuid-like keys read 1.4-2.1x faster in a Map (other key sizes
+  were not measured in a Map).
+
+What changes for users
+  - Iteration order of every string-keyed Map (and of Sets of strings) changes once, at
+    upgrade. It stays deterministic across runs and platforms. A test or example that
+    prints a string-keyed map in iteration order needs new expected output (one repo
+    example did: ExampleMap_Iterator).
+  - Maps keyed by structured strings (the "Aa"/"BB" family; also any generated keys
+    whose polynomial hashes line up) no longer degrade to a linear scan.
+  - Short, dense counter-like keys: reads about 15-25% slower at 1,000 entries and
+    level to slightly faster at 10,000 and 100,000 with random access (much slower
+    than before only when keys are read in the order they were created). 36-byte
+    uuid-like keys: 1.4-2.1x faster to read (other lengths not measured in a Map).
+  - No new dependency; go.mod and go.sum are unchanged.
+  - Still not hash-flooding resistant (the seed is fixed; the default hasher stays
+    deterministic by decision). Attacker-controlled keys need a custom seeded Hasher.
+
+Costs and limits
+  - Keys over 448 bytes hash 1.6x slower than the upstream assembly would.
+  - About 115 lines of vendored algorithm under an MIT notice in rapidhash.go, to maintain.

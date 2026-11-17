@@ -602,6 +602,37 @@ func BenchmarkBaseline_MapString_Get(b *testing.B) {
 	}
 }
 
+// BenchmarkBaseline_MapString_GetShuffled is MapString_Get with the keys read in
+// a random order. MapString_Get reads them in the order they were created, and a
+// hash that maps consecutive keys ("key-1", "key-2", ...) to nearby values (like
+// the old 31*h hash) makes each lookup follow the path the last one warmed, which
+// flatters it against a hash that spreads them; real lookups rarely come in key
+// order.
+func BenchmarkBaseline_MapString_GetShuffled(b *testing.B) {
+	for _, n := range benchBaselineSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			keys := benchStringKeys(n)
+			builder := NewMapBuilder[string, int](nil)
+			for j, k := range keys {
+				builder.Set(k, j)
+			}
+			m := builder.Map()
+			order := make([]string, n)
+			copy(order, keys)
+			rng := splitmix(5)
+			for i := n - 1; i > 0; i-- {
+				j := rng.intn(i + 1)
+				order[i], order[j] = order[j], order[i]
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt, sinkBool = m.Get(order[i%n])
+			}
+		})
+	}
+}
+
 // ----------------------------------------------------------------------------
 // Sorted map and set
 // ----------------------------------------------------------------------------
