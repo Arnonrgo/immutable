@@ -584,23 +584,19 @@ func mustPanic(t *testing.T, what string, f func()) {
 	f()
 }
 
-// requireListEquals checks Len, Get and the iterator of l against want.
-func requireListEquals(t *testing.T, l *List[int], want []int) {
+// requireListEquals checks the representation invariants, Len, Get and the iterator of l against want.
+func requireListEquals(t testing.TB, l *List[int], want []int) {
 	t.Helper()
 	if l.Len() != len(want) {
 		t.Fatalf("Len() = %d, want %d", l.Len(), len(want))
 	}
+	checkListInvariants(t, l)
 	for i, w := range want {
 		if got := l.Get(i); got != w {
 			t.Fatalf("Get(%d) = %d, want %d", i, got, w)
 		}
 	}
-	itr := l.Iterator()
-	for i := 0; !itr.Done(); i++ {
-		if idx, v := itr.Next(); idx != i || v != want[i] {
-			t.Fatalf("iterator at %d returned (%d, %d), want (%d, %d)", i, idx, v, i, want[i])
-		}
-	}
+	requireListIteration(t, l, want)
 }
 
 // TestBatchListBuilder_Lifecycle covers the states of the builder: valid,
@@ -653,9 +649,9 @@ func TestBatchListBuilder_Lifecycle(t *testing.T) {
 
 // TestBatchListBuilder_NoAliasing checks that a list built by the builder owns
 // its memory: neither later builder use nor changes to the caller's slice can
-// show through. Both representations are covered (slice node and trie).
+// show through. Both representations are covered (tail only, and trie with tail).
 func TestBatchListBuilder_NoAliasing(t *testing.T) {
-	for _, n := range []int{5, listSliceThreshold, listSliceThreshold + 1, 3 * listNodeSize * listNodeSize} {
+	for _, n := range []int{5, listNodeSize, listNodeSize + 1, 3 * listNodeSize * listNodeSize} {
 		t.Run(fmt.Sprintf("N%d", n), func(t *testing.T) {
 			want := make([]int, n)
 			for i := range want {

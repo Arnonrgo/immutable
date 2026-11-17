@@ -37,7 +37,7 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 
 **Memory Architecture Improvements:**
 - **Hybrid Data Structures**:
-    - **List**: Uses a simple slice for small lists (< 32 elements) for up to 2x faster operations and ~85% less memory usage in common cases, transparently converting to a radix-32 vector trie for larger sizes.
+    - **List**: A radix-32 vector trie plus a tail: the last up to 32 values sit in a flat slice outside the trie, so a list of up to 32 values is just that slice and `Append` copies at most 32 values until the tail fills (then it becomes one trie leaf). Building 100,000 values with an `Append` loop allocates 7.3x fewer bytes than the trie-only layout (see `memory-bank/reports/bench-phase4-2-list-tail-ab-2026-11-17.txt`).
     - **Map**: Small-structure fast paths via tiny array-node updates (≤ 8 keys); core Map remains HAMT. `BatchMapBuilder` and its set variant build the whole trie in one pass.
 - **Pointer-Based Array Sharing (planned)**: Reduce allocations in `mapHashArrayNode.clone()` via pointer-backed children with copy-on-write
 - **Lazy Copy-on-Write**: Arrays shared via pointers until actual modification

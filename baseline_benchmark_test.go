@@ -121,6 +121,46 @@ func BenchmarkBaseline_List_Get(b *testing.B) {
 	}
 }
 
+// benchSmallListSizes are list lengths up to and just past one leaf, where the
+// fixed cost of a List (struct, tail) matters more than the trie.
+var benchSmallListSizes = []int{1, 8, 32, 33}
+
+// BenchmarkBaseline_List_Small builds, appends to and sets in short lists: the
+// many-small-lists case that ADR-004 optimised and ADR-005 must not regress.
+func BenchmarkBaseline_List_Small(b *testing.B) {
+	for _, n := range benchSmallListSizes {
+		values := intsRange(n)
+		b.Run(fmt.Sprintf("New/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				sinkAny = NewList(values...)
+			}
+		})
+		b.Run(fmt.Sprintf("AppendLoop/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				sinkAny = listFromAppends(n)
+			}
+		})
+		b.Run(fmt.Sprintf("AppendOne/N%d", n), func(b *testing.B) {
+			l := NewList(values...)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkAny = l.Append(i)
+			}
+		})
+		b.Run(fmt.Sprintf("Set/N%d", n), func(b *testing.B) {
+			l := NewList(values...)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkAny = l.Set(i%n, i)
+			}
+		})
+	}
+}
+
 // listFromAppends builds a list of n values with the persistent Append loop.
 func listFromAppends(n int) *List[int] {
 	l := NewList[int]()
@@ -163,8 +203,8 @@ func BenchmarkBaseline_List_AppendBuiltSet(b *testing.B) {
 }
 
 // BenchmarkBaseline_List_Contains searches for a value that is not in the list,
-// so every element is compared. N16 is slice-backed; the larger sizes are
-// trie-backed (built with the persistent Append loop).
+// so every element is compared. N16 is only a tail; the larger sizes (built with
+// the persistent Append loop) have a trie and a tail.
 func BenchmarkBaseline_List_Contains(b *testing.B) {
 	for _, n := range []int{16, 1000, 100000} {
 		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {

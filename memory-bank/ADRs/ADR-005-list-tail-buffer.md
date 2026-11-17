@@ -1,7 +1,7 @@
 # ADR-005: Tail Buffer for List.Append
 
 ## Status
-Proposed (design for plan items 4.2-4.6; the numbers below are modelled, not yet measured)
+Accepted (option A implemented in plan item 4.2 on 2026-11-17; the Options table below is the design-time model, the Measured results section has the numbers). Options B and D remain not adopted.
 
 ## Date
 2026-11-17
@@ -49,7 +49,7 @@ Adopt **A** now (plan 4.2), measure, and decide on B and D from the measurements
 1. The `List` keeps up to 32 of its last values in `tail []T`, outside the trie. The trie holds the rest. `Append` copies the tail (at most 32 values) and never touches the trie except when the tail is full: then the full tail becomes a leaf, pushed into the trie, and a new one-value tail starts.
 2. The tail replaces `listSliceNode`. A list of up to 32 values is a tail with no trie. This removes the type switch from `Get`, `Set`, `Append`, `Prepend`, `Slice`, the iterator and `Contains`, which is most of plan item 4.6, and `listSliceNode` and its `toTrie` conversion go away.
 3. **B is not part of this change.** Revisit it in 4.3 only with a measured gain on the final code. **D is not adopted**; it is recorded here so the 10x question can be answered with data.
-4. The 4.7 gate (at least 10x fewer B/op for `Append` at N=100k) is not reachable with A or A + B on this model (7.8x and 8.9x). Measure after 4.2. If A lands in the 7-9x range, the choice is to accept it (Append still allocates a few hundred bytes instead of 2 KB, one tail copy and a clone) or to take D with its costs above. That is a decision for the owner, not a default.
+4. The 4.7 gate (at least 10x fewer B/op for `Append` at N=100k) was not reachable with A or A + B on this model (7.8x and 8.9x), and A measured 7.3x (see Measured results). Accept it (Append allocates 256 B instead of about 1.9 KB, one tail copy and a clone) or take D with its costs above. That is a decision for the owner, not a default.
 
 ## Representation and invariants
 
@@ -97,7 +97,27 @@ I3 is not enforced by the type system. 4.2 adds an internal `checkInvariants(l)`
 - Mixed-origin trees: after `Prepend` and `Slice` the trie's first leaf is partial while its right end stays aligned. The random model test (Append, Prepend, Set, Slice over a pool of versions, including prepend-built and append-built lists) must run over the new representation and check I1-I3 each step.
 - Tests that look inside the list (`list_bulk_test.go`, `immutable_test.go` "findLeaf" for the GC check, `list_depth_test.go`) assume `listSliceNode` and a root-only shape and have to move to the new shape, keeping what they pin (minimal depth, `origin == 0` after `Append`, no references outside the slice).
 
+## Measured results (2026-11-17)
+
+Old and new test binaries run alternately, minimum of 5 rounds, same machine under heavy load; allocation figures are exact. Full tables: `memory-bank/reports/bench-phase4-2-list-tail-ab-2026-11-17.txt`.
+
+| Benchmark (T = int) | Before | After | Change |
+|---|---|---|---|
+| `Append` loop, 100,000 values: B per Append | 1,863 | 256 | 7.3x fewer (model: 7.8x) |
+| same: allocs per Append | 4.69 | 2.11 | |
+| same: time per build | 52.5 ms | 9.3 ms | 5.6x |
+| `Append` loop, 10,000 / 1,000 values: time | | | 4.5x / 3.0x |
+| `ListBuilder`, 100,000 values: time | 1.93 ms | 0.67 ms | 2.9x |
+| `Append` onto 32 values | 2,080 B, 7 allocs | 360 B, 3 allocs | |
+| `Append` onto 33 values | 896 B | 80 B | |
+| `NewList` of 33 values | 1,184 B | 360 B | 3.0x faster |
+| list of 1 value | 64 B, 3 allocs | 72 B, 2 allocs | +8 B |
+| `Set` on 100,000 values | 2,048 B, 5 allocs | 2,079 B, 4 allocs | +31 B |
+| `Get`, iteration, `Contains`, `Prepend`, `NewList`, `BatchListBuilder` | | | no change beyond noise |
+
+The model said about 262 B per `Append`; the measurement is 256 B. The 10x gate in the plan is not met (7.3x).
+
 ## Implementation Notes
-- 4.2: add `tail`, remove `listSliceNode`, add `checkInvariants`, extend `TestListMatchesModel` to call it, add the zero-value test and an allocation contract (`testing.AllocsPerRun`) for `Append` into a non-full tail (2 allocs) and at a push.
-- Measure with the interleaved A/B scripts (`/tmp/ab_queue.py` pattern, old and new test binaries alternated, min of mins) because the machine's load makes single runs unusable; use `Baseline_List_Append`, `AppendBuiltGet`, `AppendBuiltSet` and add a small-list set (1, 8, 32 values) to check the 64 B `List` does not cost small lists.
-- 4.3 and D are decided from those numbers. Update this ADR's Status to Accepted, with the measured table, when 4.2 lands.
+- 4.2 (done): `tail` replaces `listSliceNode`; `checkListInvariants` (I1-I3, trie slot occupancy, no values in unoccupied leaf slots or in the tail's spare capacity) runs in `requireListEquals`, the model test and the depth and bulk tests; `TestListZeroValueIsEmpty`; `TestListAppendAllocationContract` pins 2 allocations for an `Append` or `Set` that stays in the tail and 4 / 6 for a push at depth 1 / 3; `BenchmarkBaseline_List_Small` covers lists of 1, 8, 32 and 33 values. Mutation tests (32 mutants over the tail, push, `Slice`, iterator and batch builder code) all die except four that do not change behavior.
+- Known small waste: pushing a full tail that needs a new root level allocates the new root and then copies it once more in `setLeaf` (one extra branch, once per 32^k appends). Not worth coupling `pushTail` to `setLeaf` ownership rules.
+- 4.3 (branches sized to occupancy) and D are decided from the measured numbers above, not before.

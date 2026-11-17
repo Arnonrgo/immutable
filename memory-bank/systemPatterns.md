@@ -8,11 +8,11 @@ The library implements immutable data structures using advanced tree-based algor
 
 ```mermaid
 flowchart TD
-    subgraph "Hybrid List"
+    subgraph "List (ADR-005)"
         direction LR
-        LSN["listSliceNode<br/>(for lists < 32)"]
-        LBN["List Trie<br/>(HAMT)"]
-        LSN -- "Converts to" --> LBN
+        LTL["tail []T<br/>(last 0..32 values)"]
+        LBN["List Trie<br/>(radix-32 vector trie)"]
+        LTL -- "full tail becomes a leaf" --> LBN
     end
 
     subgraph "Hybrid Map"
@@ -40,7 +40,7 @@ flowchart TD
 ```
 
 ## Key Components
-- **List**: Hybrid structure. Starts as a simple slice (`listSliceNode`) for high performance with small collections, and transparently converts to a bit-partitioned trie (HAMT) for `O(log n)` scalability with larger collections.
+- **List**: Radix-32 vector trie plus a tail. The last 0..32 values live in a flat `tail []T` outside the trie, so a list of up to 32 values is only a tail and `Append` copies at most 32 values until the tail is full and becomes one trie leaf (ADR-005). This replaced the earlier slice node (`listSliceNode`, ADR-004).
 - **Map**: Hybrid structure. Starts as a simple slice of key-value pairs (`mapArrayNode`) and converts to a Hash Array Mapped Trie (HAMT) with optimized pointer-based array sharing for larger maps.
 - **SortedMap**: B+tree with configurable node size
 - **Set/SortedSet**: Zero-overhead wrappers using Map[T, struct{}] pattern

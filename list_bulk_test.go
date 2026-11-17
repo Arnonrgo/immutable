@@ -6,8 +6,14 @@ import (
 	"testing"
 )
 
-// listTrieDepth returns the depth of the root of a trie-backed list.
-func listTrieDepth[T any](l *List[T]) uint { return l.root.depth() }
+// listTrieDepth returns the depth of the root of the list's trie; a list with
+// no trie (nothing but a tail) counts as depth 0, the same as a single leaf.
+func listTrieDepth[T any](l *List[T]) uint {
+	if l.root == nil {
+		return 0
+	}
+	return l.root.depth()
+}
 
 // minimalTrieDepth returns the smallest depth whose root can hold n values
 // (a leaf holds 32, each level above multiplies that by 32).
@@ -25,28 +31,34 @@ var bulkBoundarySizes = []int{
 	0, 1, 31, 32, 33, 34, 63, 64, 65, 1023, 1024, 1025, 1056, 2047, 2048, 32767, 32768, 32769, 40000,
 }
 
-// requireTrieShape checks the structure of a list built in bulk: a slice node
-// up to listSliceThreshold values; otherwise a trie of minimum depth with
-// origin 0 whose occupied slots are exactly the list's elements. Get and the
-// iterator cannot see a wrong occupancy mask, but Slice relies on it to drop
-// references to elements outside the range.
+// requireTrieShape checks the structure of a list built in bulk: up to one
+// leaf of values it is only a tail; otherwise the last leaf (1 to 32 values) is
+// the tail and the rest is a trie of minimum depth with origin 0 whose occupied
+// slots are exactly the values in it. Get and the iterator cannot see a wrong
+// occupancy mask, but Slice relies on it to drop references to elements outside
+// the range.
 func requireTrieShape[T any](t *testing.T, l *List[T]) {
 	t.Helper()
 	n := l.Len()
-	if n <= listSliceThreshold {
-		if _, ok := l.root.(*listSliceNode[T]); !ok {
-			t.Fatalf("n=%d: expected slice node, got %T", n, l.root)
+	checkListInvariants(t, l)
+	if n <= listNodeSize {
+		if l.root != nil || len(l.tail) != n {
+			t.Fatalf("n=%d: want a tail only, got root %T and a tail of %d", n, l.root, len(l.tail))
 		}
 		return
 	}
-	if got, want := listTrieDepth(l), minimalTrieDepth(n); got != want {
-		t.Errorf("n=%d: root depth %d, want %d", n, got, want)
+	if want := (n-1)%listNodeSize + 1; len(l.tail) != want {
+		t.Errorf("n=%d: tail of %d values, want %d", n, len(l.tail), want)
+	}
+	trieLen := l.trieLen()
+	if got, want := listTrieDepth(l), minimalTrieDepth(trieLen); got != want {
+		t.Errorf("n=%d: root depth %d, want %d for %d values in the trie", n, got, want, trieLen)
 	}
 	if l.origin != 0 {
 		t.Errorf("n=%d: origin %d, want 0", n, l.origin)
 	}
-	if got := occupiedCount(l.root); got != n {
-		t.Errorf("n=%d: %d occupied slots, want %d", n, got, n)
+	if got := occupiedCount(l.root); got != trieLen {
+		t.Errorf("n=%d: %d occupied slots, want %d", n, got, trieLen)
 	}
 }
 
@@ -166,9 +178,10 @@ func TestNewList_StringsAndPointers(t *testing.T) {
 }
 
 // occupiedCount walks a trie and counts the slots marked occupied. For a
-// well-formed list it equals Len(): Slice is documented to drop references to
-// elements outside the range, which only happens if the occupancy masks and
-// nil children are right. Get and the iterator cannot see a wrong mask.
+// well-formed list it equals the number of values in the trie (Len() less the
+// tail): Slice is documented to drop references to elements outside the range,
+// which only happens if the occupancy masks and nil children are right. Get and
+// the iterator cannot see a wrong mask.
 func occupiedCount[T any](n listNode[T]) int {
 	switch n := n.(type) {
 	case *listLeafNode[T]:
@@ -184,7 +197,7 @@ func occupiedCount[T any](n listNode[T]) int {
 	case nil:
 		return 0
 	default:
-		return -1 // slice node: not a trie
+		return -1 // not a trie node
 	}
 }
 
@@ -201,7 +214,7 @@ func bitsOnes(x uint32) int {
 // list so a regression in either construction path is visible.
 func TestNewList_BulkBuild_Occupancy(t *testing.T) {
 	for _, n := range bulkBoundarySizes {
-		if n <= listSliceThreshold {
+		if n <= listNodeSize {
 			continue
 		}
 		t.Run(fmt.Sprintf("N%d", n), func(t *testing.T) {
@@ -212,13 +225,14 @@ func TestNewList_BulkBuild_Occupancy(t *testing.T) {
 				built = built.Append(v)
 			}
 			for name, l := range map[string]*List[int]{"bulk": bulk, "appended": built} {
-				if got := occupiedCount(l.root); got != n {
-					t.Errorf("%s: %d occupied slots, want %d", name, got, n)
+				if got, want := occupiedCount(l.root), l.trieLen(); got != want {
+					t.Errorf("%s: %d occupied slots, want %d", name, got, want)
 				}
 				for _, c := range [][2]int{{1, n}, {0, n - 1}, {n / 3, 2 * n / 3}, {n / 2, n/2 + 1}} {
 					s := l.Slice(c[0], c[1])
-					if got, want := occupiedCount(s.root), c[1]-c[0]; got != want {
-						t.Errorf("%s: Slice(%d,%d) holds %d occupied slots, want %d", name, c[0], c[1], got, want)
+					checkListInvariants(t, s)
+					if got, want := occupiedCount(s.root)+len(s.tail), c[1]-c[0]; got != want {
+						t.Errorf("%s: Slice(%d,%d) holds %d values, want %d", name, c[0], c[1], got, want)
 					}
 				}
 			}

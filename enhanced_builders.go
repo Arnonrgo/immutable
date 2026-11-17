@@ -89,25 +89,21 @@ func (b *BatchListBuilder[T]) discard() {
 	b.tail, b.tailN = nil, 0
 }
 
-// List builds and returns the list and invalidates the builder. The leaves move
-// into the list, so building is O(n/32) and copies no values; call Reset to
-// start a new list with the same builder.
+// List builds and returns the list and invalidates the builder. The complete
+// leaves move into the list without copying their values; the last leaf, at most
+// 32 values, is copied into the list's tail. Building is O(n/32) plus that one
+// copy. Call Reset to start a new list with the same builder.
 func (b *BatchListBuilder[T]) List() *List[T] {
 	assert(!b.done, "immutable.BatchListBuilder: builder invalid after List() invocation")
-	var list *List[T]
-	if len(b.leaves) == 0 {
-		// Up to one leaf of values: use the slice representation, as NewList
-		// and Append do for lists up to listSliceThreshold.
-		elements := make([]T, b.tailN)
-		if b.tail != nil {
-			copy(elements, b.tail.children[:b.tailN])
-		}
-		list = &List[T]{root: &listSliceNode[T]{elements: elements}, size: b.tailN}
-	} else {
-		b.tail.occupied = uint32(1)<<b.tailN - 1
-		size := len(b.leaves)*listNodeSize + b.tailN
-		b.leaves = append(b.leaves, b.tail)
-		list = &List[T]{root: wireListLeaves(b.leaves), size: size}
+	// The completed leaves go into the trie as they are. The last leaf, one to
+	// listNodeSize values, becomes the list's tail, which is a slice of its own.
+	list := &List[T]{size: len(b.leaves)*listNodeSize + b.tailN}
+	if b.tailN > 0 {
+		list.tail = make([]T, b.tailN)
+		copy(list.tail, b.tail.children[:b.tailN])
+	}
+	if len(b.leaves) > 0 {
+		list.root = wireListLeaves(b.leaves)
 	}
 	b.discard()
 	b.done = true

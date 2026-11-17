@@ -10,14 +10,19 @@ import (
 // checked: around every capacity boundary of the trie (a leaf holds 32 values,
 // and each level above multiplies that by 32).
 var depthCheckSizes = []int{
-	33, 34, 35, 63, 64, 65, 1023, 1024, 1025, 1026, 2048, 32767, 32768, 32769, 32770,
+	33, 34, 35, 63, 64, 65, 66, 1023, 1024, 1025, 1026, 1056, 1057, 1058, 2048,
+	32767, 32768, 32769, 32770, 32800, 32801, 32802,
 }
 
+// requireMinimalDepth checks the trie is no deeper than the values in it need.
+// The last up to 32 values are the tail, outside the trie, so the depth is
+// judged against the length of the trie, not of the list.
 func requireMinimalDepth(t *testing.T, how string, l *List[int]) {
 	t.Helper()
-	if got, want := listTrieDepth(l), minimalTrieDepth(l.Len()); got != want {
-		t.Errorf("%s: n=%d has root depth %d, want %d (the smallest that holds %d values)",
-			how, l.Len(), got, want, l.Len())
+	n := l.trieLen()
+	if got, want := listTrieDepth(l), minimalTrieDepth(n); got != want {
+		t.Errorf("%s: n=%d has root depth %d for %d values in the trie, want %d",
+			how, l.Len(), got, n, want)
 	}
 }
 
@@ -78,7 +83,7 @@ func TestListAppendAndPrependKeepMinimalDepth(t *testing.T) {
 	// A list made in bulk starts at the smallest depth; Append must not add a
 	// level until its last slot is used.
 	t.Run("AppendToBulkBuiltList", func(t *testing.T) {
-		for _, n := range []int{32, 33, 1023, 1024, 1025, 32767, 32768} {
+		for _, n := range []int{32, 33, 1023, 1024, 1025, 1056, 1057, 32767, 32768, 32800, 32801} {
 			t.Run(fmt.Sprint("N", n), func(t *testing.T) {
 				l := NewList(intsRange(n)...)
 				want := intsRange(n)

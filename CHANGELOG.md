@@ -113,6 +113,9 @@ Changes since v0.6.0.
   persistent `Set` is 1.3-1.5x faster with one allocation and 22-39% fewer bytes,
   and building 100,000 values with `Append` allocates 24% fewer bytes. Values and
   behavior are unchanged.
+- The zero value of `List` (`var l immutable.List[int]`) is an empty list, as
+  documented, for every method. `Append` and `Prepend` on it used to panic with a
+  nil dereference.
 - Corrected documentation: the default hasher and comparer cover integer and
   string types only (there is no byte-slice default), the `MapBuilder.Map` and
   `SortedMapBuilder.Map` docs and panic messages, and the "must set hasher"
@@ -153,6 +156,24 @@ Changes since v0.6.0.
   also one level shallower than one built by `Append`, so `Get` and `Set` on a
   list from `NewList` are 23-39% and 22-42% faster. Values and behavior are
   unchanged.
+- **`List` keeps its last values in a tail outside the trie** (ADR-005). `Append`
+  copies at most 32 values and the `List` instead of the path from the root to
+  the last leaf, and only touches the trie once per 32 appends, when the full
+  tail becomes a leaf. Building 100,000 values with an `Append` loop went from
+  1,863 to 256 bytes and from 4.7 to 2.1 allocations per `Append` (7.3x fewer
+  bytes) and is 5.6x faster (52.5 ms to 9.3 ms); at 10,000 values it is 4.5x
+  faster with 5.9x fewer bytes, at 1,000 values 3.0x and 3.9x. `ListBuilder` is
+  2.2-2.9x faster (100,000 values: 1.93 ms to 0.67 ms). `Append` onto a list of
+  32 values allocates 360 bytes instead of 2,080, and onto 33 values 80 bytes
+  instead of 896. `NewList` of 33 values is 3x faster with 30% of the bytes.
+  The slice-backed node for lists of up to 32 values (ADR-004) is replaced by
+  the tail, so there is one code path for small and large lists. `Get`,
+  iteration and `Contains` are unchanged. The costs: the `List` struct is 32
+  bytes larger, so a list of up to 32 values takes 8 more bytes (one value:
+  72 B in 2 allocations, was 64 B in 3), and persistent `Set` on a large list
+  allocates about 30 bytes more (2,048 to 2,079 at 100,000 values) with one
+  allocation fewer. `Set` and `Prepend` on the trie still copy the whole path.
+  Values and behavior are unchanged.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
   loop makes) turns the list around once and keeps the result, so reading the

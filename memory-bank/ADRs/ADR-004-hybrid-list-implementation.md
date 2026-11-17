@@ -1,7 +1,7 @@
 # ADR-004: Hybrid List Implementation for Small List Performance
 
 ## Status
-Accepted
+Accepted. The slice node (`listSliceNode`) and its conversion to a trie were replaced by the tail buffer of [ADR-005](ADR-005-list-tail-buffer.md) on 2026-11-17: a list of up to 32 values is now a tail slice with no trie, and there is no conversion step. The small-list motivation below still holds; the `listSliceNode` mechanism does not.
 
 ## Date
 2024-07-23

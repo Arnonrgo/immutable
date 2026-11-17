@@ -177,50 +177,83 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("TestSliceFreesReferences", func(t *testing.T) {
-		/* Test that the leaf node in a sliced list contains zero'ed entries at
-		 * the correct positions. To do this we directly access the internal
-		 * tree structure of the list.
+		/* Test that a sliced list does not keep the values outside the slice
+		 * reachable. To do this we directly access the internal structure of
+		 * the list: the leaf of the trie contains zero'ed entries at the
+		 * correct positions, and a sliced tail is a copy of just its values.
+		 * 70 values are a trie of two leaves (64 values) and a tail of 6.
 		 */
+		var ints [70]int
 		l := NewList[*int]()
-		var ints [5]int
-		for i := range 5 {
+		for i := range ints {
 			l = l.Append(&ints[i])
 		}
-		sl := l.Slice(2, 4)
 
-		var findLeaf func(listNode[*int]) *listLeafNode[*int]
-		findLeaf = func(n listNode[*int]) *listLeafNode[*int] {
-			switch n := n.(type) {
-			case *listBranchNode[*int]:
-				if n.children[0] == nil {
-					t.Fatal("Failed to find leaf node due to nil child")
+		firstLeaf := func(n listNode[*int]) *listLeafNode[*int] {
+			for {
+				switch node := n.(type) {
+				case *listBranchNode[*int]:
+					n = nil
+					for _, c := range node.children {
+						if c != nil {
+							n = c
+							break
+						}
+					}
+					if n == nil {
+						t.Fatal("Failed to find leaf node: branch has no children")
+					}
+				case *listLeafNode[*int]:
+					return node
+				default:
+					t.Fatalf("Unexpected node %T", n)
 				}
-				return findLeaf(n.children[0])
-			case *listLeafNode[*int]:
-				return n
-			case *listSliceNode[*int]:
-				// For small lists using slice implementation, we need to convert to test the expected behavior
-				// This test is checking memory management in the trie structure, so skip for slice-based lists
-				t.Skip("Test not applicable to slice-based list implementation for small lists")
-				return nil
-			default:
-				panic("Unexpected case")
 			}
 		}
 
-		leaf := findLeaf(sl.root)
-		if leaf.occupied != 0b1100 {
-			t.Errorf("Expected occupied to be 1100, was %032b", leaf.occupied)
-		}
-
-		for i := 0; i < listNodeSize; i++ {
-			if 2 <= i && i < 4 {
-				if leaf.children[i] != &ints[i] {
-					t.Errorf("Position %v does not contain the right pointer?", i)
-				}
-			} else if leaf.children[i] != nil {
-				t.Errorf("Expected position %v to be cleared, was %v", i, leaf.children[i])
+		t.Run("Trie", func(t *testing.T) {
+			sl := l.Slice(34, 64) // the second leaf, without its first two values
+			leaf := firstLeaf(sl.root)
+			if want := uint32(0xFFFFFFFC); leaf.occupied != want { // slots 2 to 31
+				t.Errorf("Expected occupied to be %032b, was %032b", want, leaf.occupied)
 			}
+			for i := 0; i < listNodeSize; i++ {
+				if 2 <= i {
+					if leaf.children[i] != &ints[listNodeSize+i] {
+						t.Errorf("Position %v does not contain the right pointer?", i)
+					}
+				} else if leaf.children[i] != nil {
+					t.Errorf("Expected position %v to be cleared, was %v", i, leaf.children[i])
+				}
+			}
+			if len(sl.tail) != 0 {
+				t.Errorf("Expected an empty tail, got %d values", len(sl.tail))
+			}
+		})
+
+		// A slice that is only tail values, or whose end is inside a leaf, ends
+		// up as a tail of its own, and the tail is exactly as long as the slice.
+		for _, c := range []struct {
+			name       string
+			start, end int
+		}{
+			{"OnlyTail", 66, 68},
+			{"EndsInsideLeaf", 34, 36},
+			{"TrieAndTail", 34, 67},
+		} {
+			t.Run(c.name, func(t *testing.T) {
+				sl := l.Slice(c.start, c.end)
+				for i := range sl.tail {
+					if sl.tail[i] != &ints[c.end-len(sl.tail)+i] {
+						t.Errorf("tail[%d] holds the wrong pointer", i)
+					}
+				}
+				if cap(sl.tail) != len(sl.tail) {
+					t.Errorf("tail has room for %d values but holds %d: the old values stay reachable behind it",
+						cap(sl.tail), len(sl.tail))
+				}
+				checkListInvariants(t, sl)
+			})
 		}
 	})
 
@@ -254,10 +287,22 @@ func TestList(t *testing.T) {
 			default: // append
 				l.Append(rand.Intn(10000))
 			}
+			// The representation rules (ADR-005) are checked both for the persistent
+			// list and for the builder's list, which is updated in place. A check
+			// walks the whole trie, so it runs every 100 operations.
+			if i%100 == 99 {
+				checkListInvariants(t, l.im)
+				checkListInvariants(t, l.builder.list)
+				if t.Failed() {
+					t.Fatalf("invariant violated at operation %d", i)
+				}
+			}
 		}
 		if err := l.Validate(); err != nil {
 			t.Fatal(err)
 		}
+		checkListInvariants(t, l.im)
+		checkListInvariants(t, l.builder.list)
 	})
 }
 
@@ -275,10 +320,10 @@ func TestList_Contains(t *testing.T) {
 			l = l.Append(i)
 		}
 		if !l.Contains(0) || !l.Contains(5) || !l.Contains(9) {
-			t.Fatalf("expected present elements to be found in slice-backed list")
+			t.Fatalf("expected present elements to be found in a list that is only a tail")
 		}
 		if l.Contains(10) {
-			t.Fatalf("expected absent element to be false in slice-backed list")
+			t.Fatalf("expected absent element to be false in a list that is only a tail")
 		}
 	})
 
@@ -313,7 +358,7 @@ func TestList_Contains(t *testing.T) {
 	// Interface element type: comparability is decided per value, so a list of
 	// any may mix comparable and non-comparable dynamic types.
 	t.Run("InterfaceElement_MixedDynamicTypes", func(t *testing.T) {
-		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
 			l := NewList[any]()
 			for i := 0; i < n; i++ {
 				l = l.Append(i)
@@ -337,7 +382,7 @@ func TestList_Contains(t *testing.T) {
 			name string
 			tags []string
 		}
-		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
 			l := NewList[rec]()
 			for i := 0; i < n; i++ {
 				l = l.Append(rec{name: "r", tags: []string{fmt.Sprint(i)}})
@@ -353,7 +398,7 @@ func TestList_Contains(t *testing.T) {
 
 	t.Run("ConcreteComparableStruct", func(t *testing.T) {
 		type point struct{ x, y int }
-		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
 			l := NewList[point]()
 			for i := 0; i < n; i++ {
 				l = l.Append(point{i, i})
