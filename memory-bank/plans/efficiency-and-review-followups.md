@@ -132,13 +132,18 @@ Decision: the batch builders are kept as efficiency tools, and their API may cha
 
 ## Phase 3: Queue
 
-- [ ] 3.1 Make `Peek` not O(n) on repeated reuse. Options, measured with the Phase 0 Queue benchmarks:
-  - (a) memoize the normalized form via an atomic pointer (race-safe, benign data race avoided)
-  - (b) keep a doc-only fix if the cost is acceptable
-- [ ] 3.2 `NewQueueOf` should call `consFromSlice` directly (drops the extra copy).
-- [ ] 3.3 `QueueBuilder` builds the back cons-list directly instead of allocating a `Queue` per `Enqueue`.
-- [ ] 3.4 `QueueIterator`: collapse the two modes (front walk and back walk) into a single lazy iteration. Remove the duplicated `done` handling.
-- [ ] 3.5 Add an assert in `normalize()` (size > 0 implies a non-nil front) to enforce the size and front/back invariant.
+- [x] 3.1 Make `Peek` not O(n) on repeated reuse. Chose (a): `normalize()` stores the reversed queue in an `atomic.Pointer[Queue[T]]` (`norm`) with a compare-and-swap, so concurrent first readers share one result or each make an equal one.
+  - Measured (min of 5 interleaved rounds, N=10,000): `Peek` on a back-only queue 142 us -> 2.6 ns, 0 allocs; `Dequeue` 143 us -> 16 ns, 1 alloc (the new Queue); second pass of `Iterator` 195 us -> 29 us, 3 allocs instead of 10,002. The first read of a queue nobody has read is level (it also stores one 24 B queue). Front-populated paths (`DequeueFront`, `PeekFront`, `DrainFromSlice`, `Enqueue`, `EnqueueOne`) are level.
+  - Cost: a queue that was read while back-only keeps a second copy of its elements until it is garbage. Documented on the type and in the README.
+  - Report: `memory-bank/reports/bench-phase3-queue-ab-2026-11-17.txt`.
+- [x] 3.2 `NewQueueOf` (and `NewQueue`) call `consFromSlice` directly: one allocation and 25% of the bytes fewer, 1.08-1.14x faster. A test checks the queue does not alias the caller's slice.
+- [x] 3.3 `QueueBuilder`: done differently from the plan, on purpose. The plan said build the back cons-list directly. Both were built and measured; the builder now collects values in a slice and builds the **front** list once in `Queue()`.
+  - Back list directly: building alone is 1.45-1.6x faster than the chosen design, but a built queue then pays a reversal on its first read (N more allocations, 24N more bytes, plus the cached copy). Build and drain is 15-18% slower and makes 50% more allocations (30,002 vs 20,013 at N=10,000).
+  - Chosen design vs the old builder: build 1.3-1.45x faster, allocations halved, bytes +4.6% at N=10,000 (the slice), build and drain 1.54-1.63x faster. A queue is built to be consumed, which is why the front list won.
+  - Its test (`BuiltQueueNeedsNoReversal`) pins that the first `Dequeue` of a built queue allocates only the new Queue.
+- [x] 3.4 `QueueIterator` has one cursor (`node`, then `back` turned around once the walk reaches it) and one `Done` rule (`node == nil && back == nil`). On a queue with only a back list, `Iterator()` takes the cached reversal instead of reversing per iterator. `Next` after `Done` returns `-1, zero, false`.
+- [x] 3.5 Different from the plan: instead of an assert on the size/front invariant, the redundant `size` field was deleted and `Len` is `front.length() + back.length()` (each cons node already stores its sublist length). The invariant can no longer be broken. The struct stays at 24 B (two list pointers and the atomic pointer; `size` is gone).
+- Tests: `queue_model_test.go` (new) runs 6,000 random Enqueue / Dequeue / builder steps on a pool of versions against a slice model (reading the version a step came from after each step, and extending versions that are not the newest), plus iterator shapes (nil, empty, front only, back only, both, after dequeues), builder vs `Enqueue`, no aliasing of caller slices, a concurrent first read by 8 goroutines (run under `-race`), and allocation counts via `testing.AllocsPerRun` (exact, so not flaky). 35/35 mutations killed (cache not read or not stored, empty queue copied, wrong length, dropped front or back in `Enqueue`, `Dequeue` and `Iterator`, iterator transition skipped or kept, `Done` conditions, index not advanced, builder dropping or aliasing values, builder or `NewQueue` filling the wrong list). The mutation run found one real gap: no test built a queue with `NewQueue` and several values, so a `NewQueue` that filled the back list instead of the front survived. A pool entry for it was added. (An empty-queue iterator allocation test was added before the run, because reasoning about "normalize an empty queue" showed that mutation would otherwise be equivalent to the original by behavior.)
 
 ---
 
@@ -207,7 +212,7 @@ Do 1.1 (toolchain and CI) before the Phase 0 baseline run, so all numbers use on
 
 - Phase 4 and 5.3 change observable behavior (hash values, iteration order for maps with sequential keys). Decide the stability guarantee before starting.
 - Removing or deprecating `BatchListBuilder`, `BatchMapBuilder` and `SortedBatchBuilder` is an API change. Prefer deprecate-and-alias over deletion.
-- Queue memoization (3.1a) adds shared mutable state, so run `-race` and add a concurrent Peek test.
+- Queue memoization (3.1a) adds shared mutable state, so run `-race` and add a concurrent Peek test. Done: `TestQueueConcurrentReads`, and the full suite passes under `-race`.
 
 ## Open questions
 

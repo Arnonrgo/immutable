@@ -25,6 +25,13 @@ func queueFromEnqueue(n int) *Queue[int] {
 	return q
 }
 
+// queueWithoutMemo returns a queue with the same lists as q and nothing cached,
+// so reading it pays for any reversal again. It lets a benchmark measure the
+// first read of a queue without building a new one every iteration.
+func queueWithoutMemo(q *Queue[int]) *Queue[int] {
+	return &Queue[int]{front: q.front, back: q.back}
+}
+
 // BenchmarkBaseline_Queue_Enqueue builds a queue with the persistent Enqueue loop.
 func BenchmarkBaseline_Queue_Enqueue(b *testing.B) {
 	for _, n := range benchQueueSizes {
@@ -87,7 +94,8 @@ func BenchmarkBaseline_Queue_New(b *testing.B) {
 
 // BenchmarkBaseline_Queue_DrainFromEnqueue dequeues every element of a queue
 // built by Enqueue (back list only). This is the linear-use case: one reversal,
-// then O(1) per Dequeue.
+// then O(1) per Dequeue. Each iteration starts from a queue that has not been
+// read before, so the reversal is paid every time.
 func BenchmarkBaseline_Queue_DrainFromEnqueue(b *testing.B) {
 	for _, n := range benchQueueSizes {
 		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
@@ -95,7 +103,7 @@ func BenchmarkBaseline_Queue_DrainFromEnqueue(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				q := base
+				q := queueWithoutMemo(base)
 				for !q.Empty() {
 					var v int
 					q, v, _ = q.Dequeue()
@@ -194,8 +202,28 @@ func BenchmarkBaseline_Queue_DequeueFront(b *testing.B) {
 }
 
 // BenchmarkBaseline_Queue_Iterate iterates a whole queue built by Enqueue
-// (back list only).
+// (back list only), starting from a queue that has not been read before.
 func BenchmarkBaseline_Queue_Iterate(b *testing.B) {
+	for _, n := range benchQueueSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			base := queueFromEnqueue(n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				itr := queueWithoutMemo(base).Iterator()
+				for !itr.Done() {
+					_, v, _ := itr.Next()
+					sinkInt = v
+				}
+			}
+			reportPerElem(b, n)
+		})
+	}
+}
+
+// BenchmarkBaseline_Queue_IterateReuse iterates the same back-only queue value
+// over and over: the persistent-reuse case.
+func BenchmarkBaseline_Queue_IterateReuse(b *testing.B) {
 	for _, n := range benchQueueSizes {
 		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
 			q := queueFromEnqueue(n)
@@ -205,6 +233,71 @@ func BenchmarkBaseline_Queue_Iterate(b *testing.B) {
 				itr := q.Iterator()
 				for !itr.Done() {
 					_, v, _ := itr.Next()
+					sinkInt = v
+				}
+			}
+			reportPerElem(b, n)
+		})
+	}
+}
+
+// BenchmarkBaseline_Queue_PeekFirstRead measures the first Peek of a back-only
+// queue, which has to turn the back list around. This is the O(n) cost that
+// remains; PeekBackOnly measures every read after it.
+func BenchmarkBaseline_Queue_PeekFirstRead(b *testing.B) {
+	for _, n := range benchQueueSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			base := queueFromEnqueue(n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt, sinkBool = queueWithoutMemo(base).Peek()
+			}
+		})
+	}
+}
+
+// BenchmarkBaseline_Queue_IterateMixed iterates a queue that has both lists
+// populated: half the elements came from NewQueueOf (front), half from Enqueue
+// (back).
+func BenchmarkBaseline_Queue_IterateMixed(b *testing.B) {
+	for _, n := range benchQueueSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			q := NewQueueOf(benchIntKeys(n/2, false))
+			for i := n / 2; i < n; i++ {
+				q = q.Enqueue(i)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				itr := q.Iterator()
+				for !itr.Done() {
+					_, v, _ := itr.Next()
+					sinkInt = v
+				}
+			}
+			reportPerElem(b, n)
+		})
+	}
+}
+
+// BenchmarkBaseline_Queue_BuildAndDrain builds a queue with QueueBuilder and
+// dequeues every element: the whole life of a work queue that is filled in one
+// go and then consumed. A builder that leaves everything in the back list pays
+// a reversal at the first Dequeue; one that fills the front does not.
+func BenchmarkBaseline_Queue_BuildAndDrain(b *testing.B) {
+	for _, n := range benchQueueSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				builder := NewQueueBuilder[int]()
+				for j := 0; j < n; j++ {
+					builder.Enqueue(j)
+				}
+				q := builder.Queue()
+				for !q.Empty() {
+					var v int
+					q, v, _ = q.Dequeue()
 					sinkInt = v
 				}
 			}

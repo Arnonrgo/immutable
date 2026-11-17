@@ -231,7 +231,7 @@ Builders are invalid after the call to `List()`.
 
 ## Queue
 
-An immutable FIFO queue implemented using the classic Okasaki two-list representation backed by cons-lists. Enqueue is O(1). Dequeue and Peek are amortized O(1) when each queue version is used once (the usual `q = q.Enqueue(x)` / `q, v, ok = q.Dequeue()` pattern); the periodic O(n) reversal of the back list is amortized across n operations. The reversal is not cached, so calling `Peek` or `Dequeue` repeatedly on the *same* queue value whose front list is empty costs O(n) every time. Queues built with `NewQueue` or `NewQueueOf` start with a populated front list.
+An immutable FIFO queue implemented using the classic Okasaki two-list representation backed by cons-lists. Enqueue is O(1). Dequeue and Peek are amortized O(1): the O(n) reversal of the back list happens once per queue value and is then kept, so reading the *same* queue value again (`Peek`, `Dequeue` or `Iterator` on a queue that has only a back list, such as one made by repeated `Enqueue`) is O(1) and does not allocate for `Peek`. The kept copy costs memory: a queue that has been read while it had only a back list holds a second copy of its elements for as long as it lives. Queues built with `NewQueue`, `NewQueueOf` or `QueueBuilder` start with a populated front list and never need the reversal until the front is used up.
 
 ```go
 q := immutable.NewQueue[int]()
@@ -256,7 +256,7 @@ b.EnqueueSlice([]int{20, 30})
 finalQ := b.Queue() // the builder is now invalid: every method, including Queue(), panics
 ```
 
-Thread safety: operations return new queues; existing instances are never mutated, so concurrent reads are safe.
+Thread safety: operations return new queues and existing instances are never changed in a way you can observe, so concurrent reads are safe. The reversed copy described above is stored atomically; goroutines that read a queue for the first time at the same moment share one copy or each make an equal one.
 
 ## Map
 

@@ -102,9 +102,9 @@ Changes since v0.6.0.
   entries built one oversized array node, so `Get` on the result was a linear
   scan. The result is now a normal trie.
 - `Queue` is built on an internal cons-list, so `Enqueue` is O(1) and the
-  documented amortized O(1) `Dequeue` holds for linear use. `Peek` and `Dequeue`
-  on the same queue value whose front is empty are still O(n) per call; the
-  docs now say so.
+  documented amortized O(1) `Dequeue` holds for linear use. `Peek`, `Dequeue`
+  and `Iterator` on the same queue value whose front was empty used to repeat the
+  O(n) reversal on every call; the reversal is now cached (see Changed).
 - Corrected documentation: the default hasher and comparer cover integer and
   string types only (there is no byte-slice default), the `MapBuilder.Map` and
   `SortedMapBuilder.Map` docs and panic messages, and the "must set hasher"
@@ -145,6 +145,27 @@ Changes since v0.6.0.
   also one level shallower than one built by `Append`, so `Get` and `Set` on a
   list from `NewList` are 23-39% and 22-42% faster. Values and behavior are
   unchanged.
+- **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
+  or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
+  loop makes) turns the list around once and keeps the result, so reading the
+  same queue value again costs O(1) instead of O(n): at 10,000 elements `Peek`
+  went from 142 us to 2.6 ns with no allocation, `Dequeue` from 143 us to 16 ns,
+  and a second pass with `Iterator` is 6x faster with 3 allocations instead of
+  10,002. The first read is as fast as before. The price is memory: a queue
+  that has been read this way holds a second copy of its elements for as long
+  as it lives. The copy is stored atomically, so concurrent readers are safe
+  and share it or each make an equal one.
+- `QueueBuilder` collects the values in a slice and makes the queue once, with
+  all of them in the front list: building is 1.3-1.45x faster with half the
+  allocations (10,000 elements: 20,002 to 10,013; bytes +4.6% for the slice that
+  exists while the builder is open), and a built queue does not need a reversal
+  to be dequeued (building and draining 10,000 elements is 1.6x faster).
+  `EnqueueSlice` copies the values, as before.
+- `NewQueue` and `NewQueueOf` build the list directly instead of copying the
+  input first (1.1x faster, one allocation and 25% of the bytes fewer).
+  `QueueIterator` walks the front and then the back through one cursor and is
+  1.1-1.2x faster with 25% fewer bytes. The length of a queue is now taken from
+  its lists, not stored next to them, so the two cannot disagree.
 - Performance claims in the README (19x, 8%, 5.8%, 6-8%) were removed and
   replaced with measured numbers from a reproducible benchmark set
   (`scripts/bench.sh`, benchmarks named `BenchmarkBaseline_*`).
