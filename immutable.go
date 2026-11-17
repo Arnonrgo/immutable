@@ -35,10 +35,11 @@
 // Comparer implementation to sort keys in the map.
 //
 // These collection types automatically provide built-in hasher and comparers
-// for int, string, and byte slice keys. If you are using one of these key types
-// then simply pass a nil into the constructor. Otherwise you will need to
-// implement a custom Hasher or Comparer type. Please see the provided
-// implementations for reference.
+// for integer and string keys (including named types whose underlying type is
+// an integer or string). If you are using one of these key types then simply
+// pass a nil into the constructor. Otherwise (floats, structs, byte slices,
+// and so on) you will need to implement a custom Hasher or Comparer type.
+// Please see the provided implementations for reference.
 package immutable
 
 import (
@@ -75,7 +76,8 @@ type Map[K, V any] struct {
 
 // NewMap returns a new instance of Map. If hasher is nil, a default hasher
 // implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 func NewMap[K, V any](hasher Hasher[K]) *Map[K, V] {
 	return &Map[K, V]{
 		hasher: hasher,
@@ -85,7 +87,8 @@ func NewMap[K, V any](hasher Hasher[K]) *Map[K, V] {
 // NewMapOf returns a new instance of Map, containing a map of provided entries.
 //
 // If hasher is nil, a default hasher implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 func NewMapOf[K comparable, V any](hasher Hasher[K], entries map[K]V) *Map[K, V] {
 	m := &Map[K, V]{
 		hasher: hasher,
@@ -209,7 +212,7 @@ func NewMapBuilder[K, V any](hasher Hasher[K]) *MapBuilder[K, V] {
 // Map returns the underlying map. Only call once.
 // Builder is invalid after call. Will panic on second invocation.
 func (b *MapBuilder[K, V]) Map() *Map[K, V] {
-	assert(b.m != nil, "immutable.SortedMapBuilder.Map(): duplicate call to fetch map")
+	assert(b.m != nil, "immutable.MapBuilder.Map(): duplicate call to fetch map")
 	m := b.m
 	b.m = nil
 	return m
@@ -964,7 +967,8 @@ type SortedMap[K, V any] struct {
 
 // NewSortedMap returns a new instance of SortedMap. If comparer is nil then
 // a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 func NewSortedMap[K, V any](comparer Comparer[K]) *SortedMap[K, V] {
 	return &SortedMap[K, V]{
 		comparer: comparer,
@@ -974,7 +978,8 @@ func NewSortedMap[K, V any](comparer Comparer[K]) *SortedMap[K, V] {
 // NewSortedMapOf returns a new instance of SortedMap, containing a map of provided entries.
 //
 // If comparer is nil then a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 func NewSortedMapOf[K comparable, V any](comparer Comparer[K], entries map[K]V) *SortedMap[K, V] {
 	m := &SortedMap[K, V]{
 		comparer: comparer,
@@ -1097,8 +1102,8 @@ func NewSortedMapBuilder[K, V any](comparer Comparer[K]) *SortedMapBuilder[K, V]
 	return &SortedMapBuilder[K, V]{m: NewSortedMap[K, V](comparer)}
 }
 
-// SortedMap returns the current copy of the map.
-// The returned map is safe to use even if after the builder continues to be used.
+// Map returns the underlying sorted map. Only call once.
+// Builder is invalid after call. Will panic on second invocation.
 func (b *SortedMapBuilder[K, V]) Map() *SortedMap[K, V] {
 	assert(b.m != nil, "immutable.SortedMapBuilder.Map(): duplicate call to fetch map")
 	m := b.m
@@ -1687,11 +1692,13 @@ func (h *reflectHasher[K]) Equal(a, b K) bool {
 
 // hashUint64 returns a 32-bit hash for a 64-bit value.
 // For values that fit in 32 bits, return the lower 32 bits directly (preserves
-// historical behavior). This means sequential integer keys (0, 1, 2, …) get
-// identity hashes, which causes keys differing only in their lower 5 bits to
-// collide at the HAMT root level, producing deeper trees and more allocations.
-// Applying the finalizer unconditionally would improve distribution but would
-// break hash stability for existing users.
+// historical behavior). The HAMT consumes the hash 5 bits at a time starting
+// from the low end, so identity hashing spreads dense sequential keys (0, 1,
+// 2, …) evenly, but keys that share their low bits (multiples of 32, 1024, …)
+// all land in the same slot at each level, producing deeper trees and more
+// allocations. Applying the finalizer unconditionally would improve
+// distribution but would change hash values, and with them the iteration
+// order that users may rely on.
 // For larger values, apply a SplitMix64-style finalizer and fold to 32 bits.
 func hashUint64(value uint64) uint32 {
 	if value <= 0xffffffff {
@@ -1737,7 +1744,7 @@ func (h *defaultHasher[K]) Hash(key K) uint32 {
 	case string:
 		return hashString(x)
 	}
-	panic(fmt.Sprintf("immutable.defaultHasher.Hash: must set comparer for %T type", key))
+	panic(fmt.Sprintf("immutable.defaultHasher.Hash: must set hasher for %T type", key))
 }
 
 // Equal returns true if a is equal to b. Otherwise returns false.

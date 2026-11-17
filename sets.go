@@ -11,7 +11,8 @@ type Set[T any] struct {
 // NewSet returns a new instance of Set.
 //
 // If hasher is nil, a default hasher implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 // NewSet can also take some initial values as varargs.
 func NewSet[T any](hasher Hasher[T], values ...T) Set[T] {
 	m := NewMap[T, struct{}](hasher)
@@ -130,7 +131,8 @@ type SortedSet[T any] struct {
 //
 // If comparer is nil then
 // a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 // NewSortedSet can also take some initial values as varargs.
 func NewSortedSet[T any](comparer Comparer[T], values ...T) SortedSet[T] {
 	m := NewSortedMap[T, struct{}](comparer)

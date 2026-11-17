@@ -1,4 +1,6 @@
-# ADR-002: Profile-Guided Optimization Implementation
+# ADR-003: Profile-Guided Optimization Implementation
+
+> Numbering note: this file was originally headed "ADR-002" although it is stored as ADR-003. There is no ADR-002 document in this repository; the number was skipped. The ADR set is ADR-001, ADR-003 and ADR-004.
 
 ## Status
 Accepted

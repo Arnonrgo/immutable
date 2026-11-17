@@ -7,7 +7,7 @@ Accepted
 2024-07-23
 
 ## Context
-The `List` implementation was based on a persistent trie structure (HAMT). While this provides excellent `O(log n)` performance for large lists, benchmarks revealed significant overhead for small lists, which are a very common use case. Performance for operations like `Append` and `Prepend` was ~30x slower than a native Go slice, with ~50x more allocations.
+The `List` implementation was based on a persistent radix-32 vector trie (position-indexed, like Clojure's vectors; not a hash-array-mapped trie, which is what `Map` uses). While this provides excellent `O(log n)` performance for large lists, benchmarks revealed significant overhead for small lists, which are a very common use case. Performance for operations like `Append` and `Prepend` was ~30x slower than a native Go slice, with ~50x more allocations.
 
 ## Decision
 Implement a hybrid data structure for the `List`, similar to the existing `Map` optimization.

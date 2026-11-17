@@ -1,0 +1,192 @@
+# Plan: Efficiency & Review Follow-ups
+
+Source: `/review` of commit 576067d and `/vet` (efficiency focus), 2026-11-17.
+Rule for every phase: measure before and after with the Phase 0 baseline (`benchstat`), and do not claim a speedup in the README unless the numbers back it.
+
+Status legend: [ ] todo, [~] in progress, [x] done
+
+---
+
+## Phase 0: Benchmark ground truth (first, blocks everything else)
+
+Goal: trustworthy, repeatable numbers so each later phase can be judged against a baseline.
+
+- [x] 0.1 Fix `Map_RandomDelete` and `Set_Operations/Delete`. They delete keys that are already gone (about 2.3 ns, 0 allocs). Re-seed per iteration, using `b.StopTimer`/`StartTimer` or a pre-built persistent map plus a key sequence that is always present.
+- [x] 0.2 Fix `immutable_test.go:546,553` (SA4010). The `append` results are never used, so those benchmarks measure nothing. Use the result, or a package-level sink.
+- [x] 0.3 Add a package-level sink to all benchmarks that discard results, so the compiler can't elide the work.
+- [x] 0.4 Add Queue benchmarks:
+  - Enqueue
+  - Dequeue (linear use)
+  - Peek on a fresh queue, and Peek repeated on the same queue value (the persistent-reuse case)
+  - Iterator
+  - QueueBuilder
+  - NewQueueOf
+- [x] 0.5 Add a baseline set that matches the claims:
+  - List Append at N=1k, 10k and 100k (persistent loop)
+  - ListBuilder
+  - BatchListBuilder at batch sizes 16, 128 and 1024
+  - NewList
+  - MapBuilder vs BatchMapBuilder vs a direct `Set` loop
+  - Sequential vs random int keys (the hash-quality case)
+  - String keys
+- [x] 0.6 Replace single-shot `-benchtime=200ms -count=1` runs with `-count=10` and `benchstat`. Add a `make bench` / `scripts/bench.sh` target that writes `memory-bank/reports/bench-baseline-<date>.txt`.
+- [ ] 0.7 Commit the baseline file. Every later phase compares against it, and its PR records the benchstat diff.
+- [x] 0.8 Clean up the remaining test lint: unused `veryVerbose` and `mockComparer` (U1000), SA4006 at `immutable_test.go:1954`, ST1023 in `set_benchmarks_test.go:13`.
+
+Exit: `go vet` and `staticcheck` are clean on tests, and the baseline file is committed. (Status 2026-11-17: all done except 0.7, which waits for the owner's approval to commit.)
+
+### Baseline results (2026-11-17, `memory-bank/reports/bench-baseline-2026-11-17.txt`)
+
+Apple M1 Pro, go1.27.4, commit 576067d plus the uncommitted Phase 0 changes, `-count=10 -benchtime=200ms`. The machine was busy (load average 44-85 on 10 cores), so per-benchmark noise is ±2-19% (worst ±24%). Differences under about 20% are noise; every finding below is 5x or larger.
+
+| Finding | Numbers (N=100k unless noted) |
+|---|---|
+| Persistent `List.Append` is 28x slower than `ListBuilder` and allocates 250x more | 754 ns/elem, 232.6 MiB, 569k allocs vs 26.9 ns/elem, 942 KiB, 3.3k allocs |
+| `BatchListBuilder` beats `ListBuilder` only when the whole input fits in a few large batches; otherwise it loses, and small batches are worse than a persistent `Append` loop | batch 1024: 4.7 µs vs 16.7 µs (N=1k) and 80 µs vs 201 µs (N=10k) win, but 4.7 ms vs 2.7 ms (N=100k) loses. At N=100k batch 128: 34 ms, batch 16: 265 ms (2.35 GiB), vs 75 ms for the persistent `Append` loop. Cost grows superlinearly with N/batch (flush is O(n)). |
+| `BatchMapBuilder` matches `MapBuilder` at batch 16-128 (same 294k allocs at N=100k) and wins only when the whole input is one batch; large batches lose | N=1k batch 1024: 30 µs vs 68 µs (wins, 2.3x); N=10k batch 1024: 4.99 ms vs 0.88 ms (5.7x slower); N=100k batch 16/128: 13.2/12.5 ms vs 12.9 ms (equal) |
+| Persistent `Map.Set` loop is 6-7x slower than `MapBuilder`, and 22x slower than a Go map | 849 ns/elem, 163 MiB, 798k allocs vs 129 ns/elem, 7.7 MiB vs 38 ns/elem, 4.5 MiB (rand keys) |
+| Sequential-key lookups are 2.3x faster than random-key lookups (identity hash plus cache locality), so key distribution matters | Map.Get at N=100k: 21.6 ns (seq) vs 49.9 ns (rand); MapBuilder at N=100k: 68 vs 129 ns/elem |
+| Single persistent ops are fine in time but allocate a lot of small objects | `Map.Set` one key: 884 ns, 1.85 KiB, 8 allocs; `List.Set`: 714 ns, 2.5 KiB, 6 allocs |
+| Queue `Peek`/`Dequeue` on a back-only queue is O(n) on reuse (the README claim does not hold for persistent reuse) | N=10k: 145.7 µs, 234 KiB, 10k allocs vs 2.3 ns for a front-populated queue |
+| `QueueBuilder` is no faster than a persistent `Enqueue` loop | N=10k: 284 µs vs 271 µs |
+| String keys are in the same range as random int keys; the hash cost is not a clear outlier in this run, so 5.3 needs its own hash benchmark | MapString.Get 24.6 ns (N=1k) vs 12.7 ns (seq int) / 27.4 ns (rand int); MapString.Set 765 ns/elem vs 603 (seq) / 849 (rand) |
+
+These numbers set the Phase 2 target (batch builders must beat the plain builders at all N and batch sizes; today they win only when the input fits in one or a few large batches), the Phase 3 target (Peek O(1) on reuse), and the Phase 4 target (List Append B/op at N=100k from 232 MiB to under 23 MiB).
+
+---
+
+## Phase 1: Quick wins and doc truth (low risk)
+
+- [x] 1.1 Go version (decided): keep `go 1.26.0` in `go.mod` (it was 1.25.0 before 576067d). Build and benchmark with the installed toolchain, go1.27.4.
+  - Status 2026-11-17: `CHANGELOG.md` created (it did not exist) with the breaking changes since v0.6.0; README states Go 1.26+; `.github/workflows/test.yml` now runs a 1.26.x and 1.27.x matrix, adds `go vet` and a `-race -short` run, and pins `actions/checkout` (v4.4.0) and `actions/setup-go` (v5.6.0) to commit SHAs (the old `@v2` tags were mutable and very old). Verified locally on go1.27.4 only (build, vet, staticcheck, full tests, `-race -short`). **Go 1.26.x is not installed here, so the 1.26 leg is first exercised by CI.** The workflow itself has not been run. `default.pgo` regeneration stays in 6.1.
+  - The `go` directive is the minimum version for library consumers, so the 1.25 to 1.26 bump is a visible change. Add a CHANGELOG note, and make sure CI and the README requirements say 1.26+.
+  - Run build, vet and `-race` tests on 1.27.4, and confirm they also pass on 1.26.x if that toolchain is available (CI matrix: 1.26 and 1.27).
+  - Record the toolchain version in the Phase 0 baseline file header, and regenerate `default.pgo` with 1.27.4 (6.1).
+- [x] 1.2 Reword the Queue complexity claim in `README.md` (about line 228) and the `queue.go:3-8` comment to "amortized O(1) when each queue version is used once; worst case O(n) per op on reuse". Remove "at most one cons cell per operation".
+- [x] 1.3 Restate the README speedup claims from Phase 0 numbers:
+  - Status 2026-11-17: the 19x, 8%, 5.8% and 6-8% claims are removed or replaced with measured tables (README: intro, batch builder sections, Performance Guidelines, Current Performance Snapshot). The README now states that batch builders do not consistently beat `ListBuilder`/`MapBuilder`, with the numbers; Phase 2 will re-measure. Still unmeasured and left as they were: the small-list "up to 2x faster, ~85% less memory" claim (README Hybrid Data Structures, ADR-004) and the ADR-001 "53%" claim. There is no small-list (< 32 elements) baseline benchmark yet, so those move to 6.2 and need one added first. The concurrency figures in the README snapshot are from an earlier session and are labelled as not re-run.
+  - BatchListBuilder "19x" (restate against ListBuilder and direct construction)
+  - BatchMapBuilder "8% / 5.8%"
+  - the "6-8% memory" claim
+  - the README benchmark tables (refresh them)
+  - the List described as a "HAMT" (it is a radix-32 vector trie; also fix ADR-004 wording)
+- [x] 1.4 Fix assert and doc errors:
+  - `immutable.go:212` assert text says "SortedMapBuilder.Map()" in `MapBuilder.Map`
+  - the `SortedMapBuilder.Map` doc claims the builder stays usable
+  - the `NewMap` doc mentions a byte-slice hasher that doesn't exist
+  - "must set comparer" in `defaultHasher.Hash` should say hasher
+- [x] 1.5 Fix the ADR-003 heading ("ADR-002") and note the numbering gap.
+- [x] 1.6 Check README and CHANGELOG for `SetBuilder.Set(val)` examples and note the `Set` to `Add` break. Check README for the `iter.Seq2` builder signatures.
+  - Status 2026-11-17: the README has no `SetBuilder`/`SortedSetBuilder` or `StreamingMapBuilder.Stream/Filter/Transform` examples, so nothing needed changing there. The new CHANGELOG records the `Set` to `Add` rename, the new `SetBuilder.Set()` terminal method, the pointer-receiver change and the `iter.Seq2` signatures.
+- [ ] 1.7 Commit `memory-bank/plans/code-review-issues.md`.
+- [x] 1.8 Hoist `reflect` out of the `List.Contains` per-element loop (`list.go:77-111`) using `reflect.TypeFor[T]().Comparable()` once, and walk leaves instead of a full `Iterator()`.
+  - Done 2026-11-17 for the hoist; "walk leaves" is deferred to 4.5 (iterator rewrite). A first attempt (a per-call `func(a, b T) bool`) was measured and rejected: no faster, and +1 alloc/op (16 B), because closures in generic functions capture the type dictionary and escape. The kept version picks an equality mode once and switches per element (`valueEqualityMode`, `valuesEqual`). Result with `BenchmarkBaseline_List_Contains` (10 samples): slice-backed 4.25 to 3.67 ns/elem (-14%), trie-backed 10.7 to 10.0 ns/elem (-5%, near the noise floor), 0 added allocs. The trie case is dominated by the iterator, so 4.5 is where the real win is.
+  - Added tests for interface element types (mixed dynamic types), concrete non-comparable structs and concrete comparable structs, on both slice-backed and trie-backed lists.
+
+---
+
+## Phase 2: Builder correctness and efficiency
+
+Decision: the batch builders are kept as efficiency tools, and their API may change. They are only deprecated as a last resort, if after the fix they still can't beat the plain builder in the Phase 0 numbers.
+
+- [ ] 2.1 `BatchListBuilder`:
+  - Accumulate in a growing `[]T` and bulk-build the trie once in `List()`, with a 32-wide leaf chunker. Target: faster than `ListBuilder` (0.22 ms for 10k) at every batch size.
+  - API may change as needed, for example dropping the batch-size knob if bulk-build at `List()` makes it irrelevant.
+  - `NewList(values...)` should use the same bulk path.
+- [ ] 2.2 `BatchMapBuilder.Flush`:
+  - Replace the 130-line dedup logic with a simpler design that is actually faster than `MapBuilder` in the benchmarks (not just within noise). Options: sequential `set(..., true)`, or sort and bulk-load by hash. Keep `TestBatchMapBuilder_LastWriteWins`.
+  - Use the user `Hasher` for equality, not `any(a) == any(b)`.
+  - API may change as needed.
+- [ ] 2.3 `SortedBatchBuilder`:
+  - Honor the supplied `Comparer` (it uses `defaultCompare` today).
+  - Replace per-Set sorted insertion with a single `slices.SortFunc` at flush, or delete the sorted option.
+- [ ] 2.4 `StreamingMapBuilder`: make `Stream`, `Filter` and `Transform` consistent about auto-flush, and document the choice.
+- [ ] 2.5 Add an explicit `done` flag to `QueueBuilder`, `SetBuilder` and `SortedSetBuilder`, so the invalid state is not encoded as nil. This also fixes the misleading assert on a zero-value builder.
+
+---
+
+## Phase 3: Queue
+
+- [ ] 3.1 Make `Peek` not O(n) on repeated reuse. Options, measured with the Phase 0 Queue benchmarks:
+  - (a) memoize the normalized form via an atomic pointer (race-safe, benign data race avoided)
+  - (b) keep a doc-only fix if the cost is acceptable
+- [ ] 3.2 `NewQueueOf` should call `consFromSlice` directly (drops the extra copy).
+- [ ] 3.3 `QueueBuilder` builds the back cons-list directly instead of allocating a `Queue` per `Enqueue`.
+- [ ] 3.4 `QueueIterator`: collapse the two modes (front walk and back walk) into a single lazy iteration. Remove the duplicated `done` handling.
+- [ ] 3.5 Add an assert in `normalize()` (size > 0 implies a non-nil front) to enforce the size and front/back invariant.
+
+---
+
+## Phase 4: List allocation (largest win, own sub-plan and PR)
+
+Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
+
+- [ ] 4.1 Design note first (short ADR): tail buffer (up to 32 elements) vs smaller nodes vs both. Include the effect on `Prepend`, `Slice`, `Set` and the iterator.
+- [ ] 4.2 Implement the tail leaf in `List`: `Append` copies only the tail and pushes it into the trie when full.
+- [ ] 4.3 Size branch and leaf nodes to occupancy instead of a fixed `[32]listNode` array. Evaluate a concrete node type in place of the `listNode` interface.
+- [ ] 4.4 `Slice` on a slice-backed list should share via sub-slicing (`list.go:254-270`) instead of always copying.
+- [ ] 4.5 `ListIterator`: advance within the current leaf instead of calling `seek()` per element, and avoid the fixed `[32]` stack.
+- [ ] 4.6 Collapse the four near-duplicate slice/trie type-switch blocks (append, prepend, set, slice).
+- [ ] 4.7 Gate: all List tests (including `-race`) pass, and a benchstat table shows the allocation drop. Target: at least a 10x reduction in B/op for `Append` at N=100k (to be confirmed against the baseline).
+
+---
+
+## Phase 5: Map hot path
+
+- [ ] 5.1 In `mapValueNode.get` and the collision paths, compare the stored `keyHash` first and call `Equal` only on a hash match.
+- [ ] 5.2 Store the key hash in array nodes and entries, so expansion at `immutable.go:308-314` doesn't rehash.
+- [ ] 5.3 Hash quality (ints and strings are separate problems):
+  - Ints: replace the identity `hashUint64` for values that fit in 32 bits with the SplitMix64-style finalizer the code already uses above 32 bits. Confirm with the sequential-vs-random benchmark (sequential is about 24% slower today).
+  - Strings, default hasher (stays deterministic). Scratch benchmark in `/tmp/hashbench` (M-series arm64, mean ns/op, string keys of 8 / 16 / 64 / 1024 bytes; speed only, one repeated-byte string, distribution not measured):
+
+    | hash | 8 B | 16 B | 64 B | 1 KB |
+    |---|---|---|---|---|
+    | current `31*h` | 5.4 | 8.0 | 41 | 1014 |
+    | FNV-1a | 5.3 | 8.0 | 49 | 1303 |
+    | `hash/maphash` | 6.0 | 5.3 | 6.5 | 88 |
+    | rapidhash V3 (`go.dw1.io/rapidhash`, `HashString`) | 3.2 | 3.1 | 5.8 | 38.5 |
+
+    The same benchmark as x86_64 under Rosetta (not native speed, ranking only) gave poly31 6.1 / 8.9 / 52 / 1221, maphash 12.3 / 12.1 / 13.4 / 150, rapidhash 5.8 / 5.9 / 9.0 / 56 for 8 B / 16 B / 64 B / 1 KB.
+  - FNV-1a is dropped: it is no faster than the current hash.
+  - rapidhash is the leading candidate. It is fastest at every size tested, and deterministic: "hello" hashed identically in two process runs. It is pure Go, MIT licensed, with no dependencies. Its amd64 assembly (`accum_amd64.s`) only implements `accumBlocks`, which is called from one place (`rapidhash.go:82`) and only for inputs over 448 bytes. Shorter keys, which is nearly every map key, run the same pure-Go code on every platform. So copying the generic path into the repo with the MIT notice loses nothing for typical keys, and avoids the first dependency. Only keys over 448 bytes would be slower than the library's amd64 path.
+  - Still to do before adopting:
+    - verify distribution quality of the folded 32-bit hash on realistic key sets (sequential strings like `key1..key100000`, UUIDs, paths), comparing collision counts and map depth against the current hash
+    - re-run the string benchmarks in the repo's own Map benchmarks (Set/Get with string keys), not just the isolated hash
+    - run the vendored copy's tests, and keep the upstream license header and commit hash in the file
+    - fold 64 to 32 bits with `uint32(h) ^ uint32(h>>32)`
+  - `hash/maphash` as an opt-in `Hasher`, not the default: speed is good, but `MakeSeed()` is random and a seed can't be recreated in another process, so a maphash default would make map iteration order differ on every run, which breaks the README's deterministic-iteration promise. As an opt-in constructor it gives hash-flooding resistance. A `K comparable` constructor could use `maphash.Comparable` and also cover struct keys that the default hasher rejects. Decide in open question 2.
+  - `rapidhash.HashComparable` uses `reflect` (about 33 ns per call) and is not suitable for a hot path. xxh3 and `cespare/xxhash` are not benchmarked.
+  - Default hashes stay deterministic. Iteration order will change after upgrade (see open question 2), so add a CHANGELOG note.
+- [ ] 5.4 Typed fast paths in `defaultHasher`, so `any(key).(type)` is not evaluated on each call (per-K specialization at construction time).
+- [ ] 5.5 Evaluate allocation per entry (inline single entries in bitmap-node slots). Do this only if 5.1-5.4 leave a measurable gap. It needs its own design note.
+- [ ] 5.6 `SortedMap`: use `slices.BinarySearchFunc`, and compare the Comparer result with `> 0` or `< 0` rather than `== 1`.
+
+---
+
+## Phase 6: Housekeeping
+
+- [ ] 6.1 Regenerate `default.pgo` after Phases 2-5 (README documents the procedure), and re-run the baseline.
+- [ ] 6.2 Update the README benchmark tables and ADR claims (ADR-001 "53%", ADR-004 "~85%") from the final numbers.
+- [ ] 6.3 Document the oversize-slice-node tolerance of `BatchListBuilder` in one place, and add a test that exercises each `listSliceNode` consumer with an oversize node.
+- [ ] 6.4 Repository hygiene (found 2026-11-17 during Phase 1): the compiled test binary `immutable.test` is tracked in git (added in `ce1f089`) and should be removed with `git rm` and ignored (`*.test` in `.gitignore`). The root also holds `baseline_phase4a.txt`, `bench_list_builders_after.txt`, `bench_map_builders_after.txt`, `bench_small_map_after.txt` and `baseline_performance.md`, all older single-shot results that the Phase 0 baseline supersedes: move them under `memory-bank/reports/archive/` or delete them. Needs owner approval (it deletes tracked files).
+- [ ] 6.5 Run `/update-docs`, then `/review` again on the final diff.
+
+---
+
+## Order and dependencies
+
+Do 1.1 (toolchain and CI) before the Phase 0 baseline run, so all numbers use one toolchain: 1.1 -> 0 -> rest of 1 -> 2 -> 3 -> 4 -> 5 -> 6. Phases 3 and 5 are independent of 4, and can run in parallel after 2 if wanted. Phase 4 and 5.5 each get a separate PR and a design note first.
+
+## Risks
+
+- Phase 4 and 5.3 change observable behavior (hash values, iteration order for maps with sequential keys). Decide the stability guarantee before starting.
+- Removing or deprecating `BatchListBuilder`, `BatchMapBuilder` and `SortedBatchBuilder` is an API change. Prefer deprecate-and-alias over deletion.
+- Queue memoization (3.1a) adds shared mutable state, so run `-race` and add a concurrent Peek test.
+
+## Open questions
+
+1. ~~`go.mod` bump~~ Resolved: `go 1.26.0` stays, builds use 1.27.4 (see 1.1).
+2. Hash values and iteration order (affects 5.3). The README promises that map iteration is deterministic (same keys give the same order on every run), but not a specific order. Proposed: allow changing the default hash for ints (finalizer) and strings (vendored rapidhash generic path, if it passes the distribution and Map benchmarks), keep both deterministic, and add a CHANGELOG note that iteration order may differ after the upgrade. Offer `hash/maphash` as an opt-in `Hasher`, not as the default, because its seed is random per process. Remaining choice for the owner: is deterministic iteration order across runs a feature to keep (the default), or is a Go-map-style random order acceptable in exchange for hash-flooding resistance? Pending the owner's answer.
+
+   Dependency (proposed, owner can overrule): the owner chose "benchmark amd64 first; copy the generic path if it is close, otherwise decide on the dependency". The assembly only runs for inputs over 448 bytes, so the generic path is the same code for typical keys. Proposal: copy rapidhash's generic path into the repo with its MIT notice and add no dependency (details in 5.3).
+3. ~~Batch builders~~ Resolved: keep them as efficiency tools, API may change (see Phase 2).

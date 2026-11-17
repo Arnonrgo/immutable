@@ -13,9 +13,16 @@ collection on mutation so you will need to save the new reference.
 
 This project is a fork of [github.com/benbjohnson/immutable](https://github.com/benbjohnson/immutable) with additional performance enhancements and builder APIs.
 
-**Performance**: This library includes  batch builders that provide high accelaration for bulk operations (vs. discreet insert), with optimized memory usage 
-and automatic batching. Regular operations maintain ~2x overhead compared to Go's 
-built-in collections while providing thread-safe immutability.
+Requires Go 1.26 or later. See [CHANGELOG.md](CHANGELOG.md) for breaking changes since v0.6.0.
+
+**Performance**: Immutability has a cost: every persistent write returns a new
+collection and allocates. For bulk construction use the builders (`ListBuilder`,
+`MapBuilder`, ...), which mutate in place until you take the result. On the
+reference machine (Apple M1 Pro, 100k int keys) `MapBuilder` builds a map in
+68-129 ns per element, versus 38 ns for a built-in Go map and 603-849 ns for a
+loop of persistent `Set` calls. See the
+[Current Performance Snapshot](#current-performance-snapshot) for the numbers
+and how they were measured.
 
 Immutable collections are not for every situation, however, as they can incur
 additional CPU and memory overhead. Please evaluate the cost/benefit for your
@@ -30,10 +37,10 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 
 **Memory Architecture Improvements:**
 - **Hybrid Data Structures**:
-    - **List**: Uses a simple slice for small lists (< 32 elements) for up to 2x faster operations and ~85% less memory usage in common cases, transparently converting to a HAMT for larger sizes.
+    - **List**: Uses a simple slice for small lists (< 32 elements) for up to 2x faster operations and ~85% less memory usage in common cases, transparently converting to a radix-32 vector trie for larger sizes.
     - **Map**: Small-structure fast paths via builder initial flush and tiny array-node updates (≤ 8 keys); core Map remains HAMT.
 - **Pointer-Based Array Sharing (planned)**: Reduce allocations in `mapHashArrayNode.clone()` via pointer-backed children with copy-on-write
-- **Lazy Copy-on-Write**: Arrays shared via pointers until actual modification, reducing memory overhead by 6-8%
+- **Lazy Copy-on-Write**: Arrays shared via pointers until actual modification
 - **Cache-Friendly Design**: Improved memory layout for better CPU cache utilization
 
 
@@ -49,8 +56,8 @@ Immutable structures are snapshot-based: every mutation returns a new instance; 
 ### **Batch Builders**
 
 **Complete High-Performance Builder Suite:**
-- **`BatchListBuilder`**: up 19x faster in tests (vs. discreet ops) bulk list construction with configurable batch sizes
-- **`BatchMapBuilder`**: Measured gains on bulk construction; biggest wins for initial tiny batches and small structures
+- **`BatchListBuilder`**: buffered list construction with configurable batch sizes; much faster than a persistent `Append` loop, and faster than `ListBuilder` only for inputs that fit in a few large batches (see [Performance Guidelines](#performance-guidelines))
+- **`BatchMapBuilder`**: buffered map construction; on par with `MapBuilder` at small batch sizes (see [Performance Guidelines](#performance-guidelines))
 - **`BatchSetBuilder`** & **`BatchSortedSetBuilder`**: Efficient bulk set construction
 - **`StreamingListBuilder`** & **`StreamingMapBuilder`**: Auto-flush with functional operations (filter, transform)
 - **`SortedBatchBuilder`**: Optimized sorted map construction with optional sort maintenance
@@ -203,11 +210,11 @@ used to jump to a given index.
 If you are building large lists, it is significantly more efficient to use the
 `ListBuilder`. It uses nearly the same API as `List` except that it updates
 a list in-place until you are ready to use it. This can improve bulk list
-building by 10x or more.
+building by 17-28x (1k-100k elements, compared with a loop of `Append` calls).
 
-For even better performance with bulk operations (100+ elements), see the 
-[Advanced Batch Builders](#advanced-batch-builders) section which provides up 
-to 19x performance improvements.
+The [Advanced Batch Builders](#advanced-batch-builders) buffer appends and flush
+them in batches. They help only for some input sizes; see their Performance
+notes before choosing one over `ListBuilder`.
 
 ```go
 b := immutable.NewListBuilder[string]()
@@ -225,7 +232,7 @@ Builders are invalid after the call to `List()`.
 
 ## Queue
 
-An immutable FIFO queue with amortized O(1) Enqueue, Dequeue, and Peek, implemented using the classic Okasaki two-list representation backed by cons-lists. Each operation creates at most one cons cell, and the periodic O(n) reversal is amortized across n operations.
+An immutable FIFO queue implemented using the classic Okasaki two-list representation backed by cons-lists. Enqueue is O(1). Dequeue and Peek are amortized O(1) when each queue version is used once (the usual `q = q.Enqueue(x)` / `q, v, ok = q.Dequeue()` pattern); the periodic O(n) reversal of the back list is amortized across n operations. The reversal is not cached, so calling `Peek` or `Dequeue` repeatedly on the *same* queue value whose front list is empty costs O(n) every time. Queues built with `NewQueue` or `NewQueueOf` start with a populated front list.
 
 ```go
 q := immutable.NewQueue[int]()
@@ -448,10 +455,12 @@ The API is identical to the `Set` implementation.
 
 ## Advanced Batch Builders
 
-For high-performance bulk operations, this library provides advanced batch builders
-that can dramatically improve performance for large-scale data construction. These
-builders use internal batching and mutable operations to minimize allocations and
-provide up to **19x performance improvements** for bulk operations.
+This library provides batch builders for buffered and streaming construction. They
+collect values in an internal buffer and flush them into the collection in batches.
+Compared with a loop of persistent operations they are much faster, but they do
+**not** consistently beat the plain `ListBuilder` / `MapBuilder`: the gain depends
+on the input size and the batch size. The measured numbers are in each section's
+Performance note and in [Performance Guidelines](#performance-guidelines).
 
 ### Batch List Builder
 
@@ -471,10 +480,20 @@ for i := 0; i < 10000; i++ {
 values := []int{1, 2, 3, 4, 5}
 builder.AppendSlice(values)
 
-list := builder.List() // 19x faster than individual Append() calls
+list := builder.List()
 ```
 
-**Performance**: Up to 19x faster than direct construction for large lists.
+**Performance** (Apple M1 Pro, sequential ints, `-count=10`, see
+`memory-bank/reports/bench-baseline-2026-11-17.txt`):
+
+| Elements | `Append` loop | `ListBuilder` | `BatchListBuilder` (batch 1024) | `BatchListBuilder` (batch 16) |
+|---|---|---|---|---|
+| 1,000 | 284 µs | 16.7 µs | 4.7 µs | 47.6 µs |
+| 10,000 | 4.3 ms | 201 µs | 80 µs | 3.6 ms |
+| 100,000 | 75 ms | 2.7 ms | 4.7 ms | 265 ms |
+
+Use a large batch size (1024 or more). Small batch sizes are the slowest
+configuration, because each flush costs time proportional to the list size.
 
 ### Batch Map Builder
 
@@ -493,10 +512,14 @@ for i := 0; i < 10000; i++ {
 entries := map[string]int{"a": 1, "b": 2, "c": 3}
 builder.SetMap(entries)
 
-m := builder.Map() // 8% faster + 5.8% less memory than regular builder
+m := builder.Map()
 ```
 
-**Performance**: 8% faster with 5.8% memory reduction compared to regular builders.
+**Performance** (Apple M1 Pro, random int keys, `-count=10`): on par with
+`MapBuilder` at batch sizes 16-128 (100,000 entries: 13.2 ms and 12.5 ms vs 12.9 ms,
+with the same number of allocations). It is faster only when the whole input fits
+in one batch (1,000 entries at batch 1024: 30 µs vs 68 µs) and slower with large
+batches on larger inputs (10,000 entries at batch 1024: 5.0 ms vs 0.9 ms).
 
 ### Streaming Builders
 
@@ -572,23 +595,19 @@ sm := builder.SortedMap() // Efficiently constructed sorted map
 
 ### Performance Guidelines
 
-**When to use batch builders:**
-- Building collections with 100+ elements
-- Bulk data import/export operations
-- Processing large datasets
-- When memory efficiency is critical
+**Choosing a builder (measured, see the notes above):**
+- If you do not need buffering or streaming, `ListBuilder` and `MapBuilder` are the safe default: they are never far from the best option.
+- `BatchListBuilder` wins (up to 2.5x over `ListBuilder` in the baseline) when the input is up to roughly 10k elements and you use a batch size of 1024. For larger inputs `ListBuilder` is faster.
+- `BatchMapBuilder` matches `MapBuilder` at batch sizes 16-128 and is not a speed-up. Its value is the buffered, last-write-wins API and `Reset()` for reuse.
+- Set builders inherit the map builders' behavior.
+- Streaming builders add auto-flush and functional operations (`Filter`, `Transform`); they are a convenience, not a speed-up.
 
-**Batch size recommendations:**
-- **Small operations (< 1K elements)**: 16-32
-- **Medium operations (1K-10K elements)**: 32-64  
-- **Large operations (> 10K elements)**: 64-128
-- **Memory-constrained environments**: 16-32
+**Batch size:**
+- `BatchListBuilder`: use 1024 or more. Batch sizes of 16-128 are slower than `ListBuilder` for inputs above a few thousand elements.
+- `BatchMapBuilder`: batch sizes of 16-128 behave the same; avoid very large batches for large inputs.
 
-**Performance improvements:**
-- **List construction**: Up to 19x faster for bulk operations
-- **Map construction**: 8% faster with 5.8% memory reduction
-- **Set construction**: Inherits map performance benefits
-- **Streaming operations**: Automatic memory management with functional programming
+These are measurements of the current implementation, not guarantees. The
+numbers will be refreshed as the batch builders are reworked.
 
 
 ## Contributing
@@ -617,8 +636,35 @@ Please submit issues relating to bugs & documentation improvements.
 
 ### Current Performance Snapshot
 
-- Map Get (10K): immutable ~14.5 ns/op (0 allocs); builtin map ~6.8 ns/op; `sync.Map` Load ~20.3 ns/op
-- Map RandomSet (10K): ~595–687 ns/op, 1421 B/op, 7 allocs/op (after tuning)
+Reference machine: Apple M1 Pro, go1.27.4, `-count=10 -benchtime=200ms`. Full data:
+`memory-bank/reports/bench-baseline-2026-11-17.txt`; rerun with `scripts/bench.sh run`.
+The run was taken on a busy machine (noise about ±2-19%), so treat differences
+under about 20% as noise.
+
+Building 100,000 elements (ns per element; `rand` = random int keys, `seq` = 0..N-1):
+
+| Operation | ns/elem | B/elem (rand) | allocs/elem (rand) |
+|---|---|---|---|
+| Go map, `m[k] = v` | 38 | 47 | 0.005 |
+| `MapBuilder.Set` (seq / rand) | 68 / 129 | 81 | 2.9 |
+| `Map.Set` loop (seq / rand) | 603 / 849 | 1710 | 8.0 |
+| `ListBuilder.Append` | 27 | 9.7 | 0.03 |
+| `List.Append` loop | 754 | 2440 | 5.7 |
+| `NewList(values...)` | 25 | 9.6 | 0.03 |
+
+Single operations on a 100,000-element collection:
+
+| Operation | Time | Allocations |
+|---|---|---|
+| `Map.Get` (seq / rand) | 22 ns / 50 ns | 0 |
+| `Map.Set` of a new key (rand) | 884 ns | 1.85 KiB, 8 allocs |
+| `Map.Delete` of an existing key (rand) | 895 ns | 1.81 KiB, 7 allocs |
+| `List.Get` | 8.9 ns | 0 |
+| `List.Set` | 714 ns | 2.5 KiB, 6 allocs |
+| `SortedMap.Get` (rand) | 203 ns | 0 |
+
+Not covered by the numbers above (measured earlier, not re-run for the baseline):
+the concurrency figures below.
 - Concurrent reads (ns/op, lower is better):
   - 1G: immutable 3.53 vs `sync.Map` 6.03
   - 4G: immutable 2.31 vs `sync.Map` 3.21
@@ -643,6 +689,13 @@ mb.Reset() // clears state, preserves hasher & buffer capacity
 ```
 
 ### Benchmarking & Profiling
+
+- Reproducible baseline (10 samples per benchmark, compared with `benchstat`):
+```bash
+scripts/bench.sh run [label]        # writes memory-bank/reports/bench-<label>-<date>.txt
+scripts/bench.sh compare OLD NEW    # benchstat OLD NEW
+```
+The curated set is every benchmark named `BenchmarkBaseline_*`.
 
 - Run all benchmarks with allocations:
 ```bash

@@ -78,18 +78,11 @@ func (l *List[T]) Contains(value T) bool {
 	if l.size == 0 {
 		return false
 	}
-	// Equality function with fast path for comparable types.
-	eq := func(a, b T) bool {
-		ta := reflect.TypeOf(a)
-		if ta != nil && ta.Comparable() {
-			return any(a) == any(b)
-		}
-		return reflect.DeepEqual(a, b)
-	}
+	mode := valueEqualityMode[T]()
 	// Optimize for slice-backed lists.
 	if sliceNode, ok := l.root.(*listSliceNode[T]); ok {
 		for i := 0; i < len(sliceNode.elements); i++ {
-			if eq(sliceNode.elements[i], value) {
+			if valuesEqual(mode, sliceNode.elements[i], value) {
 				return true
 			}
 		}
@@ -99,11 +92,49 @@ func (l *List[T]) Contains(value T) bool {
 	itr := l.Iterator()
 	for !itr.Done() {
 		_, v := itr.Next()
-		if eq(v, value) {
+		if valuesEqual(mode, v, value) {
 			return true
 		}
 	}
 	return false
+}
+
+// equalityMode says how Contains compares two values of type T.
+type equalityMode uint8
+
+const (
+	equalByOperator equalityMode = iota // concrete comparable type: ==
+	equalDeep                           // concrete non-comparable type: reflect.DeepEqual
+	equalByDynamic                      // interface type: decided per value
+)
+
+// valueEqualityMode picks the comparison mode from the static type T, once per
+// call instead of once per element.
+func valueEqualityMode[T any]() equalityMode {
+	t := reflect.TypeFor[T]()
+	switch {
+	case t.Kind() == reflect.Interface:
+		return equalByDynamic
+	case t.Comparable():
+		return equalByOperator
+	default:
+		return equalDeep
+	}
+}
+
+// valuesEqual compares a and b according to mode.
+func valuesEqual[T any](mode equalityMode, a, b T) bool {
+	switch mode {
+	case equalByOperator:
+		return any(a) == any(b)
+	case equalDeep:
+		return reflect.DeepEqual(a, b)
+	}
+	// Interface element type: comparability depends on the dynamic value.
+	if ta := reflect.TypeOf(a); ta != nil && ta.Comparable() {
+		return any(a) == any(b)
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // ContainsFunc returns true if the list contains a value equal to the provided

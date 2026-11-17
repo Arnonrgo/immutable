@@ -9,10 +9,7 @@ import (
 	"testing"
 )
 
-var (
-	veryVerbose = flag.Bool("vv", false, "very verbose")
-	randomN     = flag.Int("random.n", 100, "number of RunRandom() iterations")
-)
+var randomN = flag.Int("random.n", 100, "number of RunRandom() iterations")
 
 func TestList(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
@@ -313,6 +310,60 @@ func TestList_Contains(t *testing.T) {
 		}
 	})
 
+	// Interface element type: comparability is decided per value, so a list of
+	// any may mix comparable and non-comparable dynamic types.
+	t.Run("InterfaceElement_MixedDynamicTypes", func(t *testing.T) {
+		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+			l := NewList[any]()
+			for i := 0; i < n; i++ {
+				l = l.Append(i)
+			}
+			l = l.Append([]int{1, 2}).Append("x").Append(nil)
+			for _, want := range []any{0, n - 1, []int{1, 2}, "x", nil} {
+				if !l.Contains(want) {
+					t.Fatalf("n=%d: expected to find %#v", n, want)
+				}
+			}
+			for _, notWant := range []any{n, []int{1, 3}, "y", 1.5} {
+				if l.Contains(notWant) {
+					t.Fatalf("n=%d: did not expect to find %#v", n, notWant)
+				}
+			}
+		}
+	})
+
+	t.Run("ConcreteNonComparableStruct_DeepEqual", func(t *testing.T) {
+		type rec struct {
+			name string
+			tags []string
+		}
+		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+			l := NewList[rec]()
+			for i := 0; i < n; i++ {
+				l = l.Append(rec{name: "r", tags: []string{fmt.Sprint(i)}})
+			}
+			if !l.Contains(rec{name: "r", tags: []string{"2"}}) {
+				t.Fatalf("n=%d: expected deep-equal match", n)
+			}
+			if l.Contains(rec{name: "r", tags: []string{"nope"}}) {
+				t.Fatalf("n=%d: did not expect a match", n)
+			}
+		}
+	})
+
+	t.Run("ConcreteComparableStruct", func(t *testing.T) {
+		type point struct{ x, y int }
+		for _, n := range []int{3, 100} { // slice-backed and trie-backed
+			l := NewList[point]()
+			for i := 0; i < n; i++ {
+				l = l.Append(point{i, i})
+			}
+			if !l.Contains(point{2, 2}) || l.Contains(point{2, 3}) {
+				t.Fatalf("n=%d: wrong result for comparable struct", n)
+			}
+		}
+	})
+
 	t.Run("ContainsFunc_CustomEq", func(t *testing.T) {
 		type node struct{ v int }
 		l := NewList[*node]()
@@ -545,6 +596,7 @@ func BenchmarkBuiltinSlice_Append(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			a = append(a, i)
 		}
+		sinkAny = a // keep the appended slice observable
 	})
 	b.Run("Interface", func(b *testing.B) {
 		b.ReportAllocs()
@@ -552,6 +604,7 @@ func BenchmarkBuiltinSlice_Append(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			a = append(a, i)
 		}
+		sinkAny = a
 	})
 }
 
@@ -1489,16 +1542,28 @@ func BenchmarkBuiltinMap_Set(b *testing.B) {
 func BenchmarkBuiltinMap_Delete(b *testing.B) {
 	const n = 10000000
 
-	m := make(map[int]int)
-	for i := 0; i < n; i++ {
-		m[i] = i
+	fill := func() map[int]int {
+		m := make(map[int]int, n)
+		for i := 0; i < n; i++ {
+			m[i] = i
+		}
+		return m
 	}
+	m := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			m = fill()
+			b.StartTimer()
+		}
 		delete(m, i%n)
 	}
+	sinkInt = len(m)
 }
 
 func BenchmarkMap_Set(b *testing.B) {
@@ -1521,7 +1586,7 @@ func BenchmarkMap_Delete(b *testing.B) {
 
 	m := builder.Map()
 	for i := 0; i < b.N; i++ {
-		m.Delete(i % n) // Do not update map, always operate on original
+		sinkAny = m.Delete(i % n) // Do not update map, always operate on original
 	}
 }
 
@@ -1556,16 +1621,28 @@ func BenchmarkMapBuilder_Set(b *testing.B) {
 func BenchmarkMapBuilder_Delete(b *testing.B) {
 	const n = 10000000
 
-	builder := NewMapBuilder[int, int](nil)
-	for i := 0; i < n; i++ {
-		builder.Set(i, i)
+	fill := func() *MapBuilder[int, int] {
+		builder := NewMapBuilder[int, int](nil)
+		for i := 0; i < n; i++ {
+			builder.Set(i, i)
+		}
+		return builder
 	}
+	builder := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and Delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			builder = fill()
+			b.StartTimer()
+		}
 		builder.Delete(i % n)
 	}
+	sinkInt = builder.Len()
 }
 
 func ExampleMap_Set() {
@@ -1950,8 +2027,8 @@ func TestSortedMap_Set(t *testing.T) {
 		var r string
 		func() {
 			defer func() { r = recover().(string) }()
-			m := NewSortedMap[float64, string](nil)
-			m = m.Set(float64(100), "bar")
+			// Panics: there is no default comparer for float64.
+			NewSortedMap[float64, string](nil).Set(float64(100), "bar")
 		}()
 		if r != `immutable.NewComparer: must set comparer for float64 type` {
 			t.Fatalf("unexpected panic: %q", r)
@@ -2412,7 +2489,7 @@ func BenchmarkSortedMap_Delete(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		m.Delete(i % n) // Do not update map, always operate on original
+		sinkAny = m.Delete(i % n) // Do not update map, always operate on original
 	}
 }
 
@@ -2457,16 +2534,28 @@ func BenchmarkSortedMapBuilder_Set(b *testing.B) {
 func BenchmarkSortedMapBuilder_Delete(b *testing.B) {
 	const n = 1000000
 
-	builder := NewSortedMapBuilder[int, int](nil)
-	for i := 0; i < n; i++ {
-		builder.Set(i, i)
+	fill := func() *SortedMapBuilder[int, int] {
+		builder := NewSortedMapBuilder[int, int](nil)
+		for i := 0; i < n; i++ {
+			builder.Set(i, i)
+		}
+		return builder
 	}
+	builder := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and Delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			builder = fill()
+			b.StartTimer()
+		}
 		builder.Delete(i % n)
 	}
+	sinkInt = builder.Len()
 }
 
 func ExampleSortedMap_Set() {
@@ -2613,14 +2702,4 @@ func (h *mockHasher[K]) Hash(value K) uint32 {
 // Equal executes the mocked EqualFn function.
 func (h *mockHasher[K]) Equal(a, b K) bool {
 	return h.equal(a, b)
-}
-
-// mockComparer represents a mock implementation of immutable.Comparer.
-type mockComparer[K cmp.Ordered] struct {
-	compare func(a, b K) int
-}
-
-// Compare executes the mocked CompreFn function.
-func (h *mockComparer[K]) Compare(a, b K) int {
-	return h.compare(a, b)
 }

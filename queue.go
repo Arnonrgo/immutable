@@ -2,9 +2,17 @@ package immutable
 
 // Queue is an immutable FIFO queue implemented using the classic Okasaki
 // two-list representation backed by cons-lists. Elements are enqueued onto
-// the back list and dequeued from the front list. When the front becomes
-// empty and the back is non-empty, the back is reversed and becomes the
-// new front in O(n), preserving amortized O(1) enqueue/dequeue.
+// the back list and dequeued from the front list. When the front is empty and
+// the back is not, Peek and Dequeue reverse the back list in O(n) to obtain
+// the front.
+//
+// Complexity: Enqueue is O(1). Peek and Dequeue are amortized O(1) when each
+// queue version is used once, which is the usual linear pattern
+// (q = q.Enqueue(x), q, v, _ = q.Dequeue()). The reversal is not cached, so
+// calling Peek or Dequeue repeatedly on the same queue value whose front is
+// empty costs O(n) every time (the known limitation of this structure under
+// persistent reuse). Queues built with NewQueue or NewQueueOf start with a
+// populated front and do not pay this cost until the front is drained.
 //
 // Queue is safe for concurrent read access across goroutines.
 type Queue[T any] struct {
