@@ -231,3 +231,90 @@ func TestListAppendAllocationContract(t *testing.T) {
 		}
 	})
 }
+
+// TestListContainsEveryPosition looks up each value of lists built in the ways
+// that give different leaf layouts (a full first leaf, a partial first leaf from
+// Prepend or Slice, a trie that ends in a tail) so a scan that misses the first
+// or last slot of a leaf, or stops at a leaf boundary, is found.
+func TestListContainsEveryPosition(t *testing.T) {
+	equal := func(a, b int) bool { return a == b }
+	build := map[string]func(n int) *List[int]{
+		"New": func(n int) *List[int] { return NewList(intsRange(n)...) },
+		"Append": func(n int) *List[int] {
+			l := NewList[int]()
+			for i := 0; i < n; i++ {
+				l = l.Append(i)
+			}
+			return l
+		},
+		"Prepend": func(n int) *List[int] {
+			l := NewList[int]()
+			for i := n - 1; i >= 0; i-- {
+				l = l.Prepend(i)
+			}
+			return l
+		},
+		"Slice": func(n int) *List[int] { // values 37..37+n-1, cut out of a larger list
+			return NewList(intsRange(n+70)...).Slice(37, 37+n)
+		},
+	}
+	for name, mk := range build {
+		for _, n := range []int{1, 31, 32, 33, 64, 65, 100, 1025, 1100} {
+			l := mk(n)
+			offset := 0
+			if name == "Slice" {
+				offset = 37
+			}
+			for i := 0; i < n; i++ {
+				v := i + offset
+				if !l.Contains(v) {
+					t.Fatalf("%s N=%d: Contains(%d) = false", name, n, v)
+				}
+				if !l.ContainsFunc(v, equal) {
+					t.Fatalf("%s N=%d: ContainsFunc(%d) = false", name, n, v)
+				}
+			}
+			if l.Contains(-1) || l.ContainsFunc(-1, equal) || l.Contains(n+offset+100) {
+				t.Fatalf("%s N=%d: found a value that is not in the list", name, n)
+			}
+		}
+	}
+}
+
+// TestListIteratorAllocations pins what 4.5 bought: an iterator is one small
+// allocation (its path holds one entry per trie level, not a fixed 32), stepping
+// allocates nothing, and Contains makes the iterator only when there is a trie.
+func TestListIteratorAllocations(t *testing.T) {
+	if size := reflect.TypeFor[ListIterator[int]]().Size(); size > 256 {
+		t.Errorf("ListIterator[int] is %d bytes, want at most 256", size)
+	}
+	tailOnly := NewList(intsRange(20)...)
+	big := NewList(intsRange(100000)...)
+	if got := testing.AllocsPerRun(50, func() { sinkAny = big.Iterator() }); got != 1 {
+		t.Errorf("Iterator(): %v allocs, want 1", got)
+	}
+	itr := big.Iterator()
+	if got := testing.AllocsPerRun(1000, func() {
+		if itr.Done() {
+			itr.First()
+		}
+		_, sinkInt = itr.Next()
+	}); got != 0 {
+		t.Errorf("Next: %v allocs, want 0", got)
+	}
+	itr.Last()
+	if got := testing.AllocsPerRun(1000, func() {
+		if itr.Done() {
+			itr.Last()
+		}
+		_, sinkInt = itr.Prev()
+	}); got != 0 {
+		t.Errorf("Prev: %v allocs, want 0", got)
+	}
+	if got := testing.AllocsPerRun(50, func() { sinkBool = tailOnly.Contains(-1) }); got != 0 {
+		t.Errorf("Contains on a list with no trie: %v allocs, want 0", got)
+	}
+	if got := testing.AllocsPerRun(50, func() { sinkBool = big.Contains(-1) }); got != 1 {
+		t.Errorf("Contains on a list with a trie: %v allocs, want 1 (the iterator)", got)
+	}
+}

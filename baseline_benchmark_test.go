@@ -222,6 +222,40 @@ func BenchmarkBaseline_List_Contains(b *testing.B) {
 	}
 }
 
+// BenchmarkBaseline_List_Iterate walks a whole list with the iterator, forward
+// and backward, so the cost of stepping through leaves shows in ns/elem. The
+// list is built by NewList (a full trie plus a tail).
+func BenchmarkBaseline_List_Iterate(b *testing.B) {
+	for _, n := range []int{16, 1000, 100000} {
+		l := NewList(intsRange(n)...)
+		b.Run(fmt.Sprintf("Forward/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				sum := 0
+				for itr := l.Iterator(); !itr.Done(); {
+					_, v := itr.Next()
+					sum += v
+				}
+				sinkInt = sum
+			}
+			reportPerElem(b, n)
+		})
+		b.Run(fmt.Sprintf("Backward/N%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				sum := 0
+				itr := l.Iterator()
+				for itr.Last(); !itr.Done(); {
+					_, v := itr.Prev()
+					sum += v
+				}
+				sinkInt = sum
+			}
+			reportPerElem(b, n)
+		})
+	}
+}
+
 // ----------------------------------------------------------------------------
 // Map (int keys): sequential keys vs random keys show hash quality.
 // ----------------------------------------------------------------------------

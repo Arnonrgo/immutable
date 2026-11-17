@@ -100,10 +100,11 @@ func (l *List[T]) Contains(value T) bool {
 		return false
 	}
 	itr := l.Iterator()
-	for n := l.trieLen(); itr.index < n; {
-		_, v := itr.Next()
-		if valuesEqual(mode, v, value) {
-			return true
+	for run := itr.trieRun(); run != nil; run = itr.trieRun() {
+		for _, v := range run {
+			if valuesEqual(mode, v, value) {
+				return true
+			}
 		}
 	}
 	return false
@@ -166,10 +167,11 @@ func (l *List[T]) ContainsFunc(value T, equal func(a, b T) bool) bool {
 		return false
 	}
 	itr := l.Iterator()
-	for n := l.trieLen(); itr.index < n; {
-		_, v := itr.Next()
-		if equal(v, value) {
-			return true
+	for run := itr.trieRun(); run != nil; run = itr.trieRun() {
+		for _, v := range run {
+			if equal(v, value) {
+				return true
+			}
 		}
 	}
 	return false
@@ -458,12 +460,30 @@ func (b *ListBuilder[T]) ContainsFunc(value T, equal func(a, b T) bool) bool {
 }
 
 // ListIterator represents an ordered iterator over a list.
+//
+// While the iterator is on a value held by the trie it keeps the leaf and the
+// slot of that value, so Next and Prev read the slot and step to the next one;
+// the branches above the leaf are only used to move to the neighboring leaf,
+// once per 32 values. Values in the tail are read from the tail slice.
 type ListIterator[T any] struct {
 	list  *List[T]
-	index int
-	stack [32]listIteratorElem[T]
-	depth int
+	index int              // index of the current value; out of range when done
+	leaf  *listLeafNode[T] // leaf holding index; meaningful only while index is below the trie's length
+	slot  int              // slot of index in leaf
+	path  [listMaxDepth]listIteratorElem[T]
+	depth int // number of branches of path in use: the depth of the root
 }
+
+// listIteratorElem is a branch on the way to the current leaf and the index of
+// the child that was followed.
+type listIteratorElem[T any] struct {
+	node  *listBranchNode[T]
+	index int
+}
+
+// listMaxDepth is the most branch levels a trie can have. A root of depth d
+// addresses 32^(d+1) indexes, and that has to fit an int.
+const listMaxDepth = 12
 
 func (itr *ListIterator[T]) Done() bool { return itr.index < 0 || itr.index >= itr.list.Len() }
 
@@ -488,8 +508,6 @@ func (itr *ListIterator[T]) Seek(index int) {
 	}
 	itr.index = index
 	if index < itr.list.trieLen() { // values in the tail need no position in the trie
-		itr.stack[0] = listIteratorElem[T]{node: itr.list.root}
-		itr.depth = 0
 		itr.seek(index)
 	}
 }
@@ -502,22 +520,17 @@ func (itr *ListIterator[T]) Next() (index int, value T) {
 	}
 	list := itr.list
 	trieLen := list.trieLen()
-	// The tail needs no stack: it is a slice.
-	if itr.index >= trieLen {
-		index, value = itr.index, list.tail[itr.index-trieLen]
-		itr.index++
-		return index, value
-	}
-	// Retrieve current index & value.
-	elem := &itr.stack[itr.depth]
-	index, value = itr.index, elem.node.(*listLeafNode[T]).children[elem.index]
+	index = itr.index
 	itr.index++
-	if itr.index >= trieLen { // the trie is used up; the rest, if any, is the tail
-		return index, value
+	// The tail needs no leaf: it is a slice.
+	if index >= trieLen {
+		return index, list.tail[index-trieLen]
 	}
-	for ; itr.depth > 0 && itr.stack[itr.depth].index >= listNodeSize-1; itr.depth-- {
+	value = itr.leaf.children[itr.slot]
+	itr.slot++
+	if itr.slot == listNodeSize && itr.index < trieLen {
+		itr.nextLeaf()
 	}
-	itr.seek(itr.index)
 	return index, value
 }
 
@@ -529,50 +542,98 @@ func (itr *ListIterator[T]) Prev() (index int, value T) {
 	}
 	list := itr.list
 	trieLen := list.trieLen()
-	if itr.index >= trieLen {
-		index, value = itr.index, list.tail[itr.index-trieLen]
-		itr.index--
+	index = itr.index
+	itr.index--
+	if index >= trieLen {
+		value = list.tail[index-trieLen]
 		if itr.index == trieLen-1 && itr.index >= 0 {
-			// Stepped back from the tail into the trie: the stack has not been
-			// kept for the tail, so position it from the root.
-			itr.stack[0] = listIteratorElem[T]{node: list.root}
-			itr.depth = 0
+			// Stepped back from the tail into the trie: the leaf has not been
+			// kept for the tail, so find it from the root.
 			itr.seek(itr.index)
 		}
 		return index, value
 	}
-	elem := &itr.stack[itr.depth]
-	index, value = itr.index, elem.node.(*listLeafNode[T]).children[elem.index]
-	itr.index--
-	if itr.Done() {
-		return index, value
+	value = itr.leaf.children[itr.slot]
+	if itr.index >= 0 { // otherwise this was the first value and the iterator is done
+		if itr.slot == 0 {
+			itr.prevLeaf()
+		} else {
+			itr.slot--
+		}
 	}
-	for ; itr.depth > 0 && itr.stack[itr.depth].index == 0; itr.depth-- {
-	}
-	itr.seek(itr.index)
 	return index, value
 }
 
-// seek positions the stack to the given index from the current depth.
+// trieRun returns the values from the current position to the end of the current
+// leaf, or of the trie if that comes first, and moves the iterator past them.
+// It returns nil when the trie is used up. Contains uses it to scan a leaf at a
+// time. The slice aliases the leaf and must not be written to.
+func (itr *ListIterator[T]) trieRun() []T {
+	trieLen := itr.list.trieLen()
+	if itr.index >= trieLen {
+		return nil
+	}
+	n := min(listNodeSize-itr.slot, trieLen-itr.index)
+	run := itr.leaf.children[itr.slot : itr.slot+n]
+	itr.index += n
+	itr.slot += n
+	if itr.slot == listNodeSize && itr.index < trieLen {
+		itr.nextLeaf()
+	}
+	return run
+}
+
+// seek finds the leaf of an index in the trie from the root.
 func (itr *ListIterator[T]) seek(index int) {
+	pos := itr.list.origin + index // trie index
+	node := itr.list.root
+	itr.depth = 0
 	for {
-		elem := &itr.stack[itr.depth]
-		elem.index = ((itr.list.origin + index) >> (elem.node.depth() * listNodeBits)) & listNodeMask
-		switch node := elem.node.(type) {
+		switch n := node.(type) {
 		case *listBranchNode[T]:
-			child := node.children[elem.index]
-			itr.stack[itr.depth+1] = listIteratorElem[T]{node: child}
+			i := (pos >> (n.d * listNodeBits)) & listNodeMask
+			itr.path[itr.depth] = listIteratorElem[T]{node: n, index: i}
 			itr.depth++
+			node = n.children[i]
 		case *listLeafNode[T]:
+			itr.leaf, itr.slot = n, pos&listNodeMask
 			return
 		}
 	}
 }
 
-// listIteratorElem represents the node and it's child index within the stack.
-type listIteratorElem[T any] struct {
-	node  listNode[T]
-	index int
+// nextLeaf moves to the first slot of the leaf after the current one. The trie
+// has no gaps between its first and last value, so the next leaf exists whenever
+// the iterator's index is still below the trie's length.
+func (itr *ListIterator[T]) nextLeaf() {
+	d := itr.depth - 1
+	for itr.path[d].index == listNodeSize-1 {
+		d-- // the branch's last child was the one followed: go up
+	}
+	itr.path[d].index++
+	node := itr.path[d].node.children[itr.path[d].index]
+	for d++; d < itr.depth; d++ {
+		branch := node.(*listBranchNode[T])
+		itr.path[d] = listIteratorElem[T]{node: branch, index: 0}
+		node = branch.children[0]
+	}
+	itr.leaf, itr.slot = node.(*listLeafNode[T]), 0
+}
+
+// prevLeaf moves to the last slot of the leaf before the current one.
+func (itr *ListIterator[T]) prevLeaf() {
+	d := itr.depth - 1
+	for itr.path[d].index == 0 {
+		d-- // the branch's first child was the one followed: go up
+	}
+	itr.path[d].index--
+	node := itr.path[d].node.children[itr.path[d].index]
+	for d++; d < itr.depth; d++ {
+		branch := node.(*listBranchNode[T])
+		itr.path[d] = listIteratorElem[T]{node: branch, index: listNodeSize - 1}
+		node = branch.children[listNodeSize-1]
+	}
+	itr.leaf, itr.slot = node.(*listLeafNode[T]), listNodeSize-1
 }
 
 // Constants for bit shifts used for levels in the List trie.

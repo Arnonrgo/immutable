@@ -174,6 +174,14 @@ Changes since v0.6.0.
   allocates about 30 bytes more (2,048 to 2,079 at 100,000 values) with one
   allocation fewer. `Set` and `Prepend` on the trie still copy the whole path.
   Values and behavior are unchanged.
+- **`ListIterator` is 2.4-3x faster and 3.7x smaller.** It remembers the leaf and
+  slot it is on, so `Next` and `Prev` read the slot and step, and it only walks
+  the branches above to move to the neighboring leaf, once per 32 values.
+  Iterating 100,000 values takes 0.29 ms instead of 0.69 ms (about 2.9 ns per
+  value instead of 7), and `Iterator()` allocates 240 bytes instead of 896 (its
+  path now has one entry per trie level instead of a fixed 32). `Contains` and
+  `ContainsFunc` scan a leaf at a time and are 2.3-3.2x faster on lists with a
+  trie. Values, order and behavior are unchanged.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
   loop makes) turns the list around once and keeps the result, so reading the
