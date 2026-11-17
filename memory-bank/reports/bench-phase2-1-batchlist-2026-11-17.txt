@@ -1,0 +1,165 @@
+toolchain: go1.27.4
+module-go: 1.26.0
+commit: 82b7e7c
+dirty-files: 6
+date: 2026-11-17T09:06:37Z
+load: 88.00 85.37 68.60
+bench-pattern: Baseline_List_(BatchBuilder|Builder|New)$
+bench-count: 10
+bench-time: 200ms
+goos: darwin
+goarch: arm64
+pkg: github.com/arnonrgo/immutable
+cpu: Apple M1 Pro
+BenchmarkBaseline_List_Builder/N1000-10   	   10000	     21130 ns/op	        21.13 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   10000	     20958 ns/op	        20.96 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   13490	     17516 ns/op	        17.52 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   13262	     18383 ns/op	        18.38 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   12636	     20565 ns/op	        20.56 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   14422	     74379 ns/op	        74.38 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   10755	     22352 ns/op	        22.35 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   12230	     18109 ns/op	        18.11 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   13110	     17268 ns/op	        17.27 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N1000-10   	   13794	     16569 ns/op	        16.57 ns/elem	   15560 B/op	     101 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1268	    195799 ns/op	        19.58 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1222	    197555 ns/op	        19.76 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1249	    209009 ns/op	        20.90 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1210	    210045 ns/op	        21.00 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1216	    203721 ns/op	        20.37 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1152	    208657 ns/op	        20.87 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1176	    228161 ns/op	        22.82 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1206	    195272 ns/op	        19.53 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1234	    196362 ns/op	        19.64 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N10000-10  	    1192	    207363 ns/op	        20.74 ns/elem	  102248 B/op	     392 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      88	   2891561 ns/op	        28.92 ns/elem	  965163 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      74	   2801597 ns/op	        28.02 ns/elem	  965111 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      81	   2795734 ns/op	        27.96 ns/elem	  965107 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      84	   3130049 ns/op	        31.30 ns/elem	  965116 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      91	   2720736 ns/op	        27.21 ns/elem	  965108 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      96	   2701227 ns/op	        27.01 ns/elem	  965101 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      82	   2997327 ns/op	        29.97 ns/elem	  965100 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      93	   2841173 ns/op	        28.41 ns/elem	  965113 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      82	   3205868 ns/op	        32.06 ns/elem	  965115 B/op	    3296 allocs/op
+BenchmarkBaseline_List_Builder/N100000-10 	      92	   2831285 ns/op	        28.31 ns/elem	  965107 B/op	    3296 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   27123	     13632 ns/op	        13.63 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   28866	     10054 ns/op	        10.05 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   17053	     12552 ns/op	        12.55 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   24751	      8609 ns/op	         8.609 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   29125	      8268 ns/op	         8.268 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   28297	      7837 ns/op	         7.837 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   29488	      8417 ns/op	         8.417 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   31770	      9408 ns/op	         9.408 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   29043	      8549 ns/op	         8.549 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16-10         	   28527	      8423 ns/op	         8.423 ns/elem	   35424 B/op	      43 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   33704	      8028 ns/op	         8.028 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   30532	      8572 ns/op	         8.572 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   29122	      7356 ns/op	         7.356 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   30349	      8035 ns/op	         8.035 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   30139	      8888 ns/op	         8.888 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   27358	      8049 ns/op	         8.049 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   33018	      8093 ns/op	         8.093 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   29622	      7753 ns/op	         7.753 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   29608	      7927 ns/op	         7.927 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128-10        	   34520	      8096 ns/op	         8.096 ns/elem	   34528 B/op	      40 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   39932	      6237 ns/op	         6.237 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   40374	      6073 ns/op	         6.073 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   43548	      5479 ns/op	         5.479 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   44119	      5568 ns/op	         5.568 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   43588	      6286 ns/op	         6.286 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   34254	      6489 ns/op	         6.489 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   32265	      6764 ns/op	         6.764 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   39075	      7007 ns/op	         7.007 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   26023	      8496 ns/op	         8.496 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024-10       	   24997	     14429 ns/op	        14.43 ns/elem	   18528 B/op	      36 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    1508	    182899 ns/op	        18.29 ns/elem	  459400 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2485	     93446 ns/op	         9.345 ns/elem	  459394 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2923	     91998 ns/op	         9.200 ns/elem	  459395 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2702	     88555 ns/op	         8.855 ns/elem	  459393 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2779	     87334 ns/op	         8.733 ns/elem	  459394 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    3092	     82370 ns/op	         8.237 ns/elem	  459393 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2826	     86880 ns/op	         8.688 ns/elem	  459393 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2720	    161259 ns/op	        16.13 ns/elem	  459395 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    1624	    131761 ns/op	        13.18 ns/elem	  459398 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16-10        	    2127	    126995 ns/op	        12.70 ns/elem	  459396 B/op	     341 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    1663	    141183 ns/op	        14.12 ns/elem	  458500 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2419	     86603 ns/op	         8.660 ns/elem	  458497 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2452	     89585 ns/op	         8.958 ns/elem	  458497 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    3198	     90682 ns/op	         9.068 ns/elem	  458498 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2148	    103674 ns/op	        10.37 ns/elem	  458498 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2949	     98417 ns/op	         9.842 ns/elem	  458498 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2532	     86186 ns/op	         8.619 ns/elem	  458498 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2557	     88136 ns/op	         8.814 ns/elem	  458497 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2505	    102250 ns/op	        10.22 ns/elem	  458499 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128-10       	    2306	    122793 ns/op	        12.28 ns/elem	  458501 B/op	     338 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2911	     87983 ns/op	         8.798 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    3264	     85774 ns/op	         8.577 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    3144	    115740 ns/op	        11.57 ns/elem	  402949 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2661	     90123 ns/op	         9.012 ns/elem	  402947 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2764	     83874 ns/op	         8.387 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    3033	     74176 ns/op	         7.418 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2893	     76148 ns/op	         7.615 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2962	     80132 ns/op	         8.013 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2739	     90537 ns/op	         9.054 ns/elem	  402945 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024-10      	    2730	     77440 ns/op	         7.744 ns/elem	  402944 B/op	     334 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     232	   1030981 ns/op	        10.31 ns/elem	 5117999 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     182	   1348065 ns/op	        13.48 ns/elem	 5117998 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     229	   1177626 ns/op	        11.78 ns/elem	 5118007 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     100	   2216308 ns/op	        22.16 ns/elem	 5118009 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     194	   1780717 ns/op	        17.81 ns/elem	 5118017 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     208	   1083599 ns/op	        10.84 ns/elem	 5118000 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     219	    996148 ns/op	         9.961 ns/elem	 5118000 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     249	   1547688 ns/op	        15.48 ns/elem	 5117992 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     237	   1191044 ns/op	        11.91 ns/elem	 5118011 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16-10       	     241	   1309294 ns/op	        13.09 ns/elem	 5117998 B/op	    3254 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     210	   1227783 ns/op	        12.28 ns/elem	 5117102 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     207	   1610676 ns/op	        16.11 ns/elem	 5117125 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     237	   1131396 ns/op	        11.31 ns/elem	 5117094 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     268	   1045229 ns/op	        10.45 ns/elem	 5117101 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     244	   1029024 ns/op	        10.29 ns/elem	 5117098 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     224	    907946 ns/op	         9.079 ns/elem	 5117095 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     256	   1131644 ns/op	        11.32 ns/elem	 5117104 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     230	   1249497 ns/op	        12.49 ns/elem	 5117099 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     183	   1307635 ns/op	        13.08 ns/elem	 5117099 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128-10      	     219	   1097927 ns/op	        10.98 ns/elem	 5117108 B/op	    3251 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     230	   1052870 ns/op	        10.53 ns/elem	 5503926 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     205	   1079079 ns/op	        10.79 ns/elem	 5503939 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     196	   1021874 ns/op	        10.22 ns/elem	 5503907 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     230	   1235854 ns/op	        12.36 ns/elem	 5503925 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     205	   1210037 ns/op	        12.10 ns/elem	 5503921 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     202	   1559765 ns/op	        15.60 ns/elem	 5503929 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     182	   1206667 ns/op	        12.07 ns/elem	 5503920 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     224	   1064015 ns/op	        10.64 ns/elem	 5503934 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     176	   1668480 ns/op	        16.68 ns/elem	 5503921 B/op	    3248 allocs/op
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024-10     	     214	   1097519 ns/op	        10.98 ns/elem	 5503928 B/op	    3248 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	  101839	      2386 ns/op	         2.386 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	  109843	      2226 ns/op	         2.226 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	  106584	      2218 ns/op	         2.218 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	  101517	      2135 ns/op	         2.135 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	   78333	      2891 ns/op	         2.891 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	   91770	      2958 ns/op	         2.958 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	   77899	      2854 ns/op	         2.854 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	  102310	      2586 ns/op	         2.586 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	   89352	      2771 ns/op	         2.771 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N1000-10                          	   95694	      2411 ns/op	         2.411 ns/elem	   10336 B/op	      35 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10000	     34135 ns/op	         3.413 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	    7632	     31881 ns/op	         3.188 ns/elem	  101889 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	    8220	     25640 ns/op	         2.564 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	    9757	     23050 ns/op	         2.305 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10000	     27280 ns/op	         2.727 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10000	     22714 ns/op	         2.271 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	    8643	     23839 ns/op	         2.384 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10831	     22609 ns/op	         2.261 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10000	     21965 ns/op	         2.196 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N10000-10                         	   10000	     25944 ns/op	         2.594 ns/elem	  101888 B/op	     326 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     858	    259843 ns/op	         2.598 ns/elem	 1016707 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     979	    284426 ns/op	         2.844 ns/elem	 1016708 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     964	    351900 ns/op	         3.519 ns/elem	 1016712 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     804	    346914 ns/op	         3.469 ns/elem	 1016715 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     667	    467739 ns/op	         4.677 ns/elem	 1016725 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     861	    311133 ns/op	         3.111 ns/elem	 1016711 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     836	    327659 ns/op	         3.277 ns/elem	 1016711 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     601	    465778 ns/op	         4.658 ns/elem	 1016716 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     910	    288146 ns/op	         2.881 ns/elem	 1016711 B/op	    3230 allocs/op
+BenchmarkBaseline_List_New/N100000-10                        	     914	    249827 ns/op	         2.498 ns/elem	 1016706 B/op	    3230 allocs/op
+PASS
+ok  	github.com/arnonrgo/immutable	52.034s

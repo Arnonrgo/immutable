@@ -30,10 +30,10 @@ Goal: trustworthy, repeatable numbers so each later phase can be judged against 
   - Sequential vs random int keys (the hash-quality case)
   - String keys
 - [x] 0.6 Replace single-shot `-benchtime=200ms -count=1` runs with `-count=10` and `benchstat`. Add a `make bench` / `scripts/bench.sh` target that writes `memory-bank/reports/bench-baseline-<date>.txt`.
-- [ ] 0.7 Commit the baseline file. Every later phase compares against it, and its PR records the benchstat diff.
+- [x] 0.7 Commit the baseline file (82b7e7c, local branch perf/benchmark-baseline-and-doc-truth, not pushed). Every later phase compares against it, and its PR records the benchstat diff.
 - [x] 0.8 Clean up the remaining test lint: unused `veryVerbose` and `mockComparer` (U1000), SA4006 at `immutable_test.go:1954`, ST1023 in `set_benchmarks_test.go:13`.
 
-Exit: `go vet` and `staticcheck` are clean on tests, and the baseline file is committed. (Status 2026-11-17: all done except 0.7, which waits for the owner's approval to commit.)
+Exit: `go vet` and `staticcheck` are clean on tests, and the baseline file is committed. (Status 2026-11-17: all done; 0.7 committed locally in 82b7e7c, not pushed.)
 
 ### Baseline results (2026-11-17, `memory-bank/reports/bench-baseline-2026-11-17.txt`)
 
@@ -89,10 +89,16 @@ These numbers set the Phase 2 target (batch builders must beat the plain builder
 
 Decision: the batch builders are kept as efficiency tools, and their API may change. They are only deprecated as a last resort, if after the fix they still can't beat the plain builder in the Phase 0 numbers.
 
-- [ ] 2.1 `BatchListBuilder`:
+- [x] 2.1 `BatchListBuilder`:
   - Accumulate in a growing `[]T` and bulk-build the trie once in `List()`, with a 32-wide leaf chunker. Target: faster than `ListBuilder` (0.22 ms for 10k) at every batch size.
   - API may change as needed, for example dropping the batch-size knob if bulk-build at `List()` makes it irrelevant.
   - `NewList(values...)` should use the same bulk path.
+  - Status 2026-11-17: done, target met. Not built as planned: a first version accumulated in a growing `[]T` and bulk-built in `List()`. It beat `ListBuilder` by about 2.3x in time, but allocated 4.9 MiB per build at N=100k (Go grows large slices by about 1.25x, so the buffer produced about 4x its final size in garbage) against 0.94 MiB for `ListBuilder`. The kept design writes straight into 32-wide `listLeafNode`s (`tail` plus a `leaves` slice) and `List()` only wires branches (`wireListLeaves`, shared with `NewList` via `buildListTrie`). Nothing is copied twice and no oversize slice node is ever produced.
+  - API changes (in CHANGELOG): `Flush` is a deprecated no-op; the size argument is only a hint; every method panics after `List()` (as `ListBuilder` does), including `Len`; a second `List()` panics where it used to return nil.
+  - Results, same machine under heavy load (load average 85-127 on 10 cores), `-count=10`, vs the committed baseline: `BatchListBuilder` N=100k batch 16: 265 ms, 2.35 GiB -> 0.50 ms, 1.07 MiB; batch 128: 34 ms -> 0.48 ms; batch 1024: 4.7 ms, 37.9 MiB -> 0.52 ms, 1.07 MiB. Against `ListBuilder` in the same run (27 ns/elem, 942 KiB): 4.2x (N=1k), 4.5x (N=10k) and 5.4x (N=100k) faster, at +13% B/op. Batch size makes no measurable difference. `NewList` N=100k: 2.5 ms -> 0.27 ms (B/op +6%: the intermediate leaf slice). allocs/op for the batch builder rose at batch 128 and 1024 (203 -> 3238 at N=100k) because the old version produced one huge slice node (few allocations, quadratic copy) and the new one a real trie.
+  - Side effect to remember when comparing later phases: `NewList` now builds a minimum-depth trie, which is one level shallower than an append-built one, so `Baseline_List_Get` and `Baseline_List_Set` (which build their input with `NewList`) moved: Get -23% to -39%, Set -22% to -42% time, -22% to -39% B/op and one fewer allocation. That is not an improvement of Get or Set themselves. Compare Phase 4 against `memory-bank/reports/bench-phase2-1-listops-2026-11-17.txt`, not the original baseline, for those two. `Baseline_List_Append` (an append loop) is unaffected.
+  - Reports: `memory-bank/reports/bench-phase2-1-batchlist-v2-2026-11-17.txt` (final), `...-batchlist-2026-11-17.txt` (first, rejected design), `...-listops-2026-11-17.txt`.
+  - Tests added: `list_bulk_test.go` (shape and mutation checks around every node-capacity boundary: contents, minimum depth, origin 0, occupancy masks, and Append/Prepend/Set/Slice/Contains on bulk-built lists) and builder lifecycle, aliasing and size tests in `enhanced_builders_test.go`. Verified by mutation: 8 deliberate breakages (wrong occupancy mask, lost last child, wrong branch depth, size off by one, AppendSlice not advancing, Reset not clearing, missing occupied on seal and on the tail) each fail at least one test. One mutation (wrong occupancy mask) first survived because `Get` and the iterator cannot see it, so the structural `occupiedCount` check was added.
 - [ ] 2.2 `BatchMapBuilder.Flush`:
   - Replace the 130-line dedup logic with a simpler design that is actually faster than `MapBuilder` in the benchmarks (not just within noise). Options: sequential `set(..., true)`, or sort and bulk-load by hash. Keep `TestBatchMapBuilder_LastWriteWins`.
   - Use the user `Hasher` for equality, not `any(a) == any(b)`.
@@ -121,6 +127,7 @@ Decision: the batch builders are kept as efficiency tools, and their API may cha
 
 Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
 
+- [ ] 4.0 Quick win found during 2.1: `List.cap()` (`list.go:59`) returns `1 << (depth*5)`, but a depth-d root holds 32^(d+1) values (a leaf holds 32, each level above multiplies by 32). It under-reports by 32x, so `append` adds a root level 32x too early and every append-built list is one level deeper than needed (measured on append loops: n=1024 has depth 2, minimal is 1; n=100000 has depth 4, minimal 3). One level less cut `Get` by 23-39% and persistent `Set` by 22-42% time and B/op with one fewer allocation when measured on `NewList`-built lists (see 2.1). Candidate fix: `1 << ((depth+1)*5)`. Check `prepend` (origin arithmetic uses `depth`), `slice` (contraction loop) and the iterator against a depth-minimal tree, and add the shape test from `list_bulk_test.go` for append-built and prepend-built lists. Do this before 4.1: it changes the baseline for the rest of Phase 4.
 - [ ] 4.1 Design note first (short ADR): tail buffer (up to 32 elements) vs smaller nodes vs both. Include the effect on `Prepend`, `Slice`, `Set` and the iterator.
 - [ ] 4.2 Implement the tail leaf in `List`: `Append` copies only the tail and pushes it into the trie when full.
 - [ ] 4.3 Size branch and leaf nodes to occupancy instead of a fixed `[32]listNode` array. Evaluate a concrete node type in place of the `listNode` interface.
@@ -167,7 +174,7 @@ Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
 
 - [ ] 6.1 Regenerate `default.pgo` after Phases 2-5 (README documents the procedure), and re-run the baseline.
 - [ ] 6.2 Update the README benchmark tables and ADR claims (ADR-001 "53%", ADR-004 "~85%") from the final numbers.
-- [ ] 6.3 Document the oversize-slice-node tolerance of `BatchListBuilder` in one place, and add a test that exercises each `listSliceNode` consumer with an oversize node.
+- [ ] 6.3 Obsolete after 2.1: `BatchListBuilder` no longer produces oversize slice nodes. Check whether any code still tolerates a `listSliceNode` larger than `listSliceThreshold` (`append` and `prepend` convert at `size >= threshold`, which works for any size) and either delete that tolerance or leave a one-line comment; no test needed.
 - [ ] 6.4 Repository hygiene (found 2026-11-17 during Phase 1): the compiled test binary `immutable.test` is tracked in git (added in `ce1f089`) and should be removed with `git rm` and ignored (`*.test` in `.gitignore`). The root also holds `baseline_phase4a.txt`, `bench_list_builders_after.txt`, `bench_map_builders_after.txt`, `bench_small_map_after.txt` and `baseline_performance.md`, all older single-shot results that the Phase 0 baseline supersedes: move them under `memory-bank/reports/archive/` or delete them. Needs owner approval (it deletes tracked files).
 - [ ] 6.5 Run `/update-docs`, then `/review` again on the final diff.
 

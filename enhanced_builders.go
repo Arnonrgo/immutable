@@ -5,94 +5,122 @@ import (
 	"iter"
 )
 
-// BatchListBuilder provides enhanced batch operations for efficient List construction.
-// Optimized for bulk insertions with minimal allocations.
+// BatchListBuilder builds a List from a sequence of appends. Values are written
+// straight into the 32-wide leaf nodes of the final trie, and List only joins
+// the leaves into branches, so Append is a plain array store, nothing is copied
+// twice and nothing is held in a second buffer. It is faster than ListBuilder,
+// which copies a path through the trie for every value, and allocates about the
+// same.
+//
+// A BatchListBuilder is not safe for concurrent use. After List is called the
+// builder is invalid until Reset.
 type BatchListBuilder[T any] struct {
-	list      *List[T]
-	batchSize int
-	buffer    []T
+	// Completed leaves, all full. leaves plus tail hold the values in order.
+	leaves []listNode[T]
+	// Leaf being filled, holding tailN values. tail is nil until the first
+	// value. A full tail is only moved to leaves when the next value arrives,
+	// so tail is non-nil whenever the builder holds at least one value.
+	tail  *listLeafNode[T]
+	tailN int
+	done  bool // set by List; cleared by Reset
 }
 
-// NewBatchListBuilder returns a new batch-optimized list builder.
-// batchSize determines the internal buffer size for batch operations.
+// NewBatchListBuilder returns a new batch list builder. batchSize is a hint for
+// how many values will be appended, used to size the internal bookkeeping up
+// front; the builder grows as needed, so it is never a limit. A value of zero
+// or less selects a default of 32.
 func NewBatchListBuilder[T any](batchSize int) *BatchListBuilder[T] {
 	if batchSize <= 0 {
-		batchSize = 32 // default batch size
+		batchSize = 32 // default hint
 	}
-	return &BatchListBuilder[T]{
-		list:      NewList[T](),
-		batchSize: batchSize,
-		buffer:    make([]T, 0, batchSize),
-	}
+	return &BatchListBuilder[T]{leaves: make([]listNode[T], 0, batchSize/listNodeSize)}
 }
 
-// Append adds a single value to the batch buffer.
-// Values are flushed to the list when buffer reaches capacity.
+// Append adds a single value to the end of the list being built.
 func (b *BatchListBuilder[T]) Append(value T) {
-	b.buffer = append(b.buffer, value)
-	if len(b.buffer) >= b.batchSize {
-		b.Flush()
+	assert(!b.done, "immutable.BatchListBuilder: builder invalid after List() invocation")
+	if b.tailN == listNodeSize {
+		b.sealTail()
 	}
+	if b.tail == nil {
+		b.tail = &listLeafNode[T]{}
+	}
+	b.tail.children[b.tailN] = value
+	b.tailN++
 }
 
-// AppendSlice adds multiple values efficiently.
-// Automatically handles batching for optimal performance.
+// AppendSlice adds all values, in order, to the end of the list being built.
+// The values are copied, so the caller may reuse the slice afterwards.
 func (b *BatchListBuilder[T]) AppendSlice(values []T) {
-	for _, value := range values {
-		b.Append(value)
-	}
-}
-
-// Flush commits all buffered values to the underlying list.
-func (b *BatchListBuilder[T]) Flush() {
-	if len(b.buffer) == 0 {
-		return
-	}
-
-	// Fast path: if underlying list is slice-backed, extend in one allocation.
-	// This may produce a slice node larger than listSliceThreshold. That is
-	// intentional: batch-built lists trade threshold compliance for build
-	// speed. The first subsequent Append/Prepend by a consumer will trigger
-	// a one-time O(n) trie conversion.
-	if sliceNode, ok := b.list.root.(*listSliceNode[T]); ok {
-		newLen := b.list.size + len(b.buffer)
-		newElements := make([]T, newLen)
-		copy(newElements, sliceNode.elements)
-		copy(newElements[b.list.size:], b.buffer)
-		b.list.root = &listSliceNode[T]{elements: newElements}
-		b.list.size = newLen
-	} else {
-		// Fallback: append one-by-one using mutable trie path
-		for _, value := range b.buffer {
-			b.list = b.list.append(value, true) // mutable for performance
+	assert(!b.done, "immutable.BatchListBuilder: builder invalid after List() invocation")
+	for len(values) > 0 {
+		if b.tailN == listNodeSize {
+			b.sealTail()
 		}
+		if b.tail == nil {
+			b.tail = &listLeafNode[T]{}
+		}
+		n := copy(b.tail.children[b.tailN:], values)
+		b.tailN += n
+		values = values[n:]
 	}
-
-	// Clear buffer (reuse capacity)
-	b.buffer = b.buffer[:0]
 }
 
-// Reset clears the builder state while retaining buffer capacity.
+// sealTail moves the full tail leaf to the completed leaves.
+func (b *BatchListBuilder[T]) sealTail() {
+	b.tail.occupied = ^uint32(0)
+	b.leaves = append(b.leaves, b.tail)
+	b.tail, b.tailN = nil, 0
+}
+
+// Flush does nothing. Values are no longer committed in batches; the list is
+// built once, by List.
+//
+// Deprecated: Flush is a no-op and is kept only so existing callers compile.
+func (b *BatchListBuilder[T]) Flush() {}
+
+// Reset discards all values and makes the builder valid again.
 func (b *BatchListBuilder[T]) Reset() {
-	b.list = NewList[T]()
-	b.buffer = b.buffer[:0]
+	b.discard()
+	b.done = false
 }
 
-// List returns the final list and invalidates the builder.
-// Automatically flushes any remaining buffered values.
+// discard drops every node the builder holds, keeping the leaves slice capacity.
+func (b *BatchListBuilder[T]) discard() {
+	clear(b.leaves) // drop references so the nodes can be collected
+	b.leaves = b.leaves[:0]
+	b.tail, b.tailN = nil, 0
+}
+
+// List builds and returns the list and invalidates the builder. The leaves move
+// into the list, so building is O(n/32) and copies no values; call Reset to
+// start a new list with the same builder.
 func (b *BatchListBuilder[T]) List() *List[T] {
-	b.Flush()
-	list := b.list
-	b.list = nil
+	assert(!b.done, "immutable.BatchListBuilder: builder invalid after List() invocation")
+	var list *List[T]
+	if len(b.leaves) == 0 {
+		// Up to one leaf of values: use the slice representation, as NewList
+		// and Append do for lists up to listSliceThreshold.
+		elements := make([]T, b.tailN)
+		if b.tail != nil {
+			copy(elements, b.tail.children[:b.tailN])
+		}
+		list = &List[T]{root: &listSliceNode[T]{elements: elements}, size: b.tailN}
+	} else {
+		b.tail.occupied = uint32(1)<<b.tailN - 1
+		size := len(b.leaves)*listNodeSize + b.tailN
+		b.leaves = append(b.leaves, b.tail)
+		list = &List[T]{root: wireListLeaves(b.leaves), size: size}
+	}
+	b.discard()
+	b.done = true
 	return list
 }
 
-// Len returns the total number of elements (committed + buffered).
+// Len returns the number of values collected so far.
 func (b *BatchListBuilder[T]) Len() int {
-	if b.list == nil {
-		return 0
-	}
-	return b.list.Len() + len(b.buffer)
+	assert(!b.done, "immutable.BatchListBuilder: builder invalid after List() invocation")
+	return len(b.leaves)*listNodeSize + b.tailN
 }
 
 // BatchMapBuilder provides enhanced batch operations for efficient Map construction.

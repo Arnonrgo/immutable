@@ -24,26 +24,19 @@ type List[T any] struct {
 }
 
 // NewList returns a new empty instance of List.
-func NewList[T any](values ...T) *List[T] {
-	if len(values) > listSliceThreshold {
-		l := &List[T]{
-			root:   &listLeafNode[T]{},
-			origin: 0,
-			size:   0,
-		}
-		for _, value := range values {
-			l = l.append(value, true)
-		}
-		return l
-	}
+func NewList[T any](values ...T) *List[T] { return newListFromValues(values) }
 
-	// For small lists, use the slice-based implementation.
-	newValues := make([]T, len(values))
-	copy(newValues, values)
-	return &List[T]{
-		root: &listSliceNode[T]{elements: newValues},
-		size: len(values),
+// newListFromValues returns a list holding a copy of values; the caller keeps
+// ownership of the slice. Up to listSliceThreshold values use the slice
+// representation. Larger inputs are built bottom-up in a single O(n) pass
+// (see buildListTrie) instead of appending one value at a time.
+func newListFromValues[T any](values []T) *List[T] {
+	if len(values) > listSliceThreshold {
+		return &List[T]{root: buildListTrie(values), size: len(values)}
 	}
+	elements := make([]T, len(values))
+	copy(elements, values)
+	return &List[T]{root: &listSliceNode[T]{elements: elements}, size: len(values)}
 }
 
 // clone returns a copy of the list.
@@ -731,39 +724,46 @@ func (n *listSliceNode[T]) deleteBefore(index int, mutable bool) listNode[T] { r
 func (n *listSliceNode[T]) deleteAfter(index int, mutable bool) listNode[T]  { return n }
 
 // toTrie converts a listSliceNode to a trie-based structure.
-func (n *listSliceNode[T]) toTrie() listNode[T] {
-	numElements := len(n.elements)
-	if numElements == 0 {
+func (n *listSliceNode[T]) toTrie() listNode[T] { return buildListTrie(n.elements) }
+
+// buildListTrie builds a trie holding a copy of elements, with the first
+// element at index 0 (origin 0). It copies the values into full 32-wide leaves
+// and joins them with wireListLeaves. It does one allocation per node and never
+// copies a path, so it is O(n).
+func buildListTrie[T any](elements []T) listNode[T] {
+	if len(elements) == 0 {
 		return &listLeafNode[T]{}
 	}
-	var leaves []listNode[T]
-	for i := 0; i < numElements; i += listNodeSize {
-		end := i + listNodeSize
-		if end > numElements {
-			end = numElements
-		}
-		chunk := n.elements[i:end]
-		leaf := &listLeafNode[T]{}
+	leaves := make([]listNode[T], 0, (len(elements)+listNodeMask)/listNodeSize)
+	for i := 0; i < len(elements); i += listNodeSize {
+		chunk := elements[i:min(i+listNodeSize, len(elements))]
+		leaf := &listLeafNode[T]{occupied: uint32(1)<<len(chunk) - 1}
 		copy(leaf.children[:], chunk)
-		leaf.occupied = (uint32(1) << len(chunk)) - 1
 		leaves = append(leaves, leaf)
 	}
-	nodes := leaves
-	depth := uint(1)
-	for len(nodes) > 1 {
-		var parents []listNode[T]
+	return wireListLeaves(leaves)
+}
+
+// wireListLeaves joins leaves into one trie by building each level of branch
+// nodes from the level below, until a single root remains. leaves must not be
+// empty, and every leaf except the last must be full; the last leaf's occupied
+// mask must already be set. The result has the minimum depth for the number of
+// leaves: the leaf itself for one leaf, a depth-1 branch up to 32 leaves, and so
+// on. Only the last node of each level can be partly filled and unused children
+// stay nil, which is the same shape a sequence of appends produces.
+//
+// The slice is used as scratch space and its contents are overwritten.
+func wireListLeaves[T any](nodes []listNode[T]) listNode[T] {
+	for depth := uint(1); len(nodes) > 1; depth++ {
+		// Parent j is written after children [32j, 32j+32) were read, and
+		// j <= 32j, so nothing unread is overwritten.
+		parents := nodes[:0]
 		for i := 0; i < len(nodes); i += listNodeSize {
-			end := i + listNodeSize
-			if end > len(nodes) {
-				end = len(nodes)
-			}
-			chunk := nodes[i:end]
 			parent := &listBranchNode[T]{d: depth}
-			copy(parent.children[:], chunk)
+			copy(parent.children[:], nodes[i:min(i+listNodeSize, len(nodes))])
 			parents = append(parents, parent)
 		}
 		nodes = parents
-		depth++
 	}
 	return nodes[0]
 }

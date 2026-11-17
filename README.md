@@ -56,7 +56,7 @@ Immutable structures are snapshot-based: every mutation returns a new instance; 
 ### **Batch Builders**
 
 **Complete High-Performance Builder Suite:**
-- **`BatchListBuilder`**: buffered list construction with configurable batch sizes; much faster than a persistent `Append` loop, and faster than `ListBuilder` only for inputs that fit in a few large batches (see [Performance Guidelines](#performance-guidelines))
+- **`BatchListBuilder`**: list construction that fills the final trie leaves directly and joins them in `List()`; about 4-5x faster than `ListBuilder` at every size measured, and about 150x faster than a persistent `Append` loop at 100k elements (see [Performance Guidelines](#performance-guidelines))
 - **`BatchMapBuilder`**: buffered map construction; on par with `MapBuilder` at small batch sizes (see [Performance Guidelines](#performance-guidelines))
 - **`BatchSetBuilder`** & **`BatchSortedSetBuilder`**: Efficient bulk set construction
 - **`StreamingListBuilder`** & **`StreamingMapBuilder`**: Auto-flush with functional operations (filter, transform)
@@ -464,12 +464,15 @@ Performance note and in [Performance Guidelines](#performance-guidelines).
 
 ### Batch List Builder
 
-The `BatchListBuilder` provides batched list construction with configurable batch
-sizes for optimal performance:
+The `BatchListBuilder` writes values straight into the 32-wide leaf nodes of the
+final list and joins the leaves in `List()`. `Append` is an array store, no value
+is copied twice, and no path is copied through the trie, so it is faster than
+`ListBuilder` at every size measured:
 
 ```go
-// Create a batch builder with batch size of 64
-builder := immutable.NewBatchListBuilder[int](64)
+// The argument is a hint for how many values you expect (0 selects a default).
+// It is never a limit; the builder grows as needed.
+builder := immutable.NewBatchListBuilder[int](10000)
 
 // Add many elements efficiently
 for i := 0; i < 10000; i++ {
@@ -486,14 +489,20 @@ list := builder.List()
 **Performance** (Apple M1 Pro, sequential ints, `-count=10`, see
 `memory-bank/reports/bench-baseline-2026-11-17.txt`):
 
-| Elements | `Append` loop | `ListBuilder` | `BatchListBuilder` (batch 1024) | `BatchListBuilder` (batch 16) |
+| Elements | `Append` loop | `ListBuilder` | `BatchListBuilder` | `NewList(values...)` |
 |---|---|---|---|---|
-| 1,000 | 284 µs | 16.7 µs | 4.7 µs | 47.6 µs |
-| 10,000 | 4.3 ms | 201 µs | 80 µs | 3.6 ms |
-| 100,000 | 75 ms | 2.7 ms | 4.7 ms | 265 ms |
+| 1,000 | 284 µs | 17 µs | 4.3 µs | 2.4 µs |
+| 10,000 | 4.3 ms | 200 µs | 44 µs | 22 µs |
+| 100,000 | 75 ms | 2.7 ms | 0.5 ms | 0.27 ms |
 
-Use a large batch size (1024 or more). Small batch sizes are the slowest
-configuration, because each flush costs time proportional to the list size.
+At 100,000 elements `BatchListBuilder` allocates 1.07 MiB per build against
+0.94 MiB for `ListBuilder`. The numbers for `BatchListBuilder` do not depend on
+the size argument (batch sizes 16, 128 and 1024 were all measured within noise
+of each other), and `NewList(values...)` is faster still when you already have a
+slice. Earlier releases flushed in batches and copied the whole list on every
+flush, so a small batch size was very slow (265 ms at 100,000 elements with
+batch size 16); that no longer applies. Measured on a machine under heavy load, so treat differences of about 20% or
+less as noise; the effects above are 4x or larger.
 
 ### Batch Map Builder
 
@@ -597,13 +606,13 @@ sm := builder.SortedMap() // Efficiently constructed sorted map
 
 **Choosing a builder (measured, see the notes above):**
 - If you do not need buffering or streaming, `ListBuilder` and `MapBuilder` are the safe default: they are never far from the best option.
-- `BatchListBuilder` wins (up to 2.5x over `ListBuilder` in the baseline) when the input is up to roughly 10k elements and you use a batch size of 1024. For larger inputs `ListBuilder` is faster.
+- `BatchListBuilder` is faster than `ListBuilder` at every size measured (1k, 10k and 100k elements), by about 4-5x. Use it whenever you only append. If you already hold the values in a slice, `NewList(values...)` is faster again. Use `ListBuilder` when you need to `Set`, `Prepend`, `Slice` or `Get` while building.
 - `BatchMapBuilder` matches `MapBuilder` at batch sizes 16-128 and is not a speed-up. Its value is the buffered, last-write-wins API and `Reset()` for reuse.
 - Set builders inherit the map builders' behavior.
 - Streaming builders add auto-flush and functional operations (`Filter`, `Transform`); they are a convenience, not a speed-up.
 
 **Batch size:**
-- `BatchListBuilder`: use 1024 or more. Batch sizes of 16-128 are slower than `ListBuilder` for inputs above a few thousand elements.
+- `BatchListBuilder`: the size argument is only a sizing hint and does not change the speed.
 - `BatchMapBuilder`: batch sizes of 16-128 behave the same; avoid very large batches for large inputs.
 
 These are measurements of the current implementation, not guarantees. The
@@ -626,7 +635,7 @@ Please submit issues relating to bugs & documentation improvements.
 
 - zero dependencies
 - Small-structure fast paths:
-  - List: Batch flush extends slice-backed lists in a single allocation
+  - List: `NewList(values...)` and `BatchListBuilder` build the trie bottom-up in one pass (the 2025-09 batch flush that extended a slice in place was replaced because it copied the whole list on every flush)
   - Map: Empty-map batch flush builds an array node in one shot (last-write-wins); tiny array-node updates applied in-place when under threshold
 - New builder APIs:
   - `(*BatchListBuilder).Reset()` and `(*BatchMapBuilder).Reset()` for builder reuse without reallocations
@@ -679,8 +688,8 @@ the concurrency figures below.
 ```go
 // Reuse list builder across batches without reallocations
 lb := immutable.NewBatchListBuilder[int](64)
-// ... append/flush ...
-lb.Reset() // clears state, keeps capacity
+// ... append ...
+lb.Reset() // discards the values and makes the builder valid again
 
 // Reuse map builder and retain hasher
 mb := immutable.NewBatchMapBuilder[string,int](nil, 64)

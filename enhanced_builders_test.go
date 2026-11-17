@@ -37,9 +37,8 @@ func TestBatchListBuilder(t *testing.T) {
 		}
 
 		// Builder should be invalidated
-		if builder.list != nil {
-			t.Error("Builder should be invalidated after List() call")
-		}
+		mustPanic(t, "Append after List", func() { builder.Append(6) })
+		mustPanic(t, "second List", func() { builder.List() })
 	})
 
 	t.Run("AppendSlice", func(t *testing.T) {
@@ -559,4 +558,175 @@ func TestBatchBuilderEdgeCases(t *testing.T) {
 			t.Error("Expected second map to be nil after builder invalidation")
 		}
 	})
+}
+
+// mustPanic fails the test unless f panics.
+func mustPanic(t *testing.T, what string, f func()) {
+	t.Helper()
+	defer func() {
+		t.Helper()
+		if recover() == nil {
+			t.Errorf("%s: expected a panic", what)
+		}
+	}()
+	f()
+}
+
+// requireListEquals checks Len, Get and the iterator of l against want.
+func requireListEquals(t *testing.T, l *List[int], want []int) {
+	t.Helper()
+	if l.Len() != len(want) {
+		t.Fatalf("Len() = %d, want %d", l.Len(), len(want))
+	}
+	for i, w := range want {
+		if got := l.Get(i); got != w {
+			t.Fatalf("Get(%d) = %d, want %d", i, got, w)
+		}
+	}
+	itr := l.Iterator()
+	for i := 0; !itr.Done(); i++ {
+		if idx, v := itr.Next(); idx != i || v != want[i] {
+			t.Fatalf("iterator at %d returned (%d, %d), want (%d, %d)", i, idx, v, i, want[i])
+		}
+	}
+}
+
+// TestBatchListBuilder_Lifecycle covers the states of the builder: valid,
+// invalid after List, valid again after Reset.
+func TestBatchListBuilder_Lifecycle(t *testing.T) {
+	t.Run("InvalidAfterList", func(t *testing.T) {
+		b := NewBatchListBuilder[int](0)
+		b.Append(1)
+		_ = b.List()
+		mustPanic(t, "Append", func() { b.Append(2) })
+		mustPanic(t, "AppendSlice", func() { b.AppendSlice([]int{2}) })
+		mustPanic(t, "Len", func() { b.Len() })
+		mustPanic(t, "List", func() { b.List() })
+	})
+
+	t.Run("ResetMakesBuilderValidAndEmpty", func(t *testing.T) {
+		b := NewBatchListBuilder[int](4)
+		b.AppendSlice([]int{1, 2, 3})
+		first := b.List()
+		b.Reset()
+		if b.Len() != 0 {
+			t.Fatalf("Len() after Reset = %d, want 0", b.Len())
+		}
+		b.Append(9)
+		second := b.List()
+		requireListEquals(t, first, []int{1, 2, 3})
+		requireListEquals(t, second, []int{9})
+	})
+
+	t.Run("ResetBeforeList", func(t *testing.T) {
+		b := NewBatchListBuilder[int](4)
+		b.AppendSlice([]int{1, 2, 3})
+		b.Reset()
+		b.Append(7)
+		requireListEquals(t, b.List(), []int{7})
+	})
+
+	t.Run("FlushIsNoOp", func(t *testing.T) {
+		b := NewBatchListBuilder[int](2)
+		b.Append(1)
+		b.Flush()
+		b.Append(2)
+		b.Flush()
+		if b.Len() != 2 {
+			t.Fatalf("Len() = %d, want 2", b.Len())
+		}
+		requireListEquals(t, b.List(), []int{1, 2})
+	})
+}
+
+// TestBatchListBuilder_NoAliasing checks that a list built by the builder owns
+// its memory: neither later builder use nor changes to the caller's slice can
+// show through. Both representations are covered (slice node and trie).
+func TestBatchListBuilder_NoAliasing(t *testing.T) {
+	for _, n := range []int{5, listSliceThreshold, listSliceThreshold + 1, 3 * listNodeSize * listNodeSize} {
+		t.Run(fmt.Sprintf("N%d", n), func(t *testing.T) {
+			want := make([]int, n)
+			for i := range want {
+				want[i] = i
+			}
+
+			// The caller's slice is not retained by AppendSlice.
+			input := append([]int(nil), want...)
+			b := NewBatchListBuilder[int](0)
+			b.AppendSlice(input)
+			for i := range input {
+				input[i] = -1
+			}
+			list := b.List()
+			requireListEquals(t, list, want)
+
+			// Reusing the builder after Reset must not change the list.
+			b.Reset()
+			for i := 0; i < n; i++ {
+				b.Append(-2)
+			}
+			_ = b.List()
+			requireListEquals(t, list, want)
+		})
+	}
+}
+
+// TestBatchListBuilder_Sizes builds lists of sizes around every node-capacity
+// boundary and checks them against a reference slice, using each of the three
+// ways to add values.
+func TestBatchListBuilder_Sizes(t *testing.T) {
+	sizes := []int{0, 1, 2, 31, 32, 33, 63, 64, 65, 1023, 1024, 1025, 2048, 32767, 32768, 32769}
+	for _, n := range sizes {
+		want := make([]int, n)
+		for i := range want {
+			want[i] = i * 3
+		}
+		t.Run(fmt.Sprintf("N%d", n), func(t *testing.T) {
+			t.Run("Append", func(t *testing.T) {
+				b := NewBatchListBuilder[int](16)
+				for _, v := range want {
+					b.Append(v)
+				}
+				if b.Len() != n {
+					t.Fatalf("Len() = %d, want %d", b.Len(), n)
+				}
+				l := b.List()
+				requireListEquals(t, l, want)
+				requireTrieShape(t, l)
+			})
+			t.Run("AppendSlice", func(t *testing.T) {
+				b := NewBatchListBuilder[int](16)
+				b.AppendSlice(want)
+				l := b.List()
+				requireListEquals(t, l, want)
+				requireTrieShape(t, l)
+			})
+			t.Run("AppendSliceInPieces", func(t *testing.T) {
+				b := NewBatchListBuilder[int](1)
+				for i := 0; i < n; i += 7 {
+					b.AppendSlice(want[i:min(i+7, n)])
+				}
+				l := b.List()
+				requireListEquals(t, l, want)
+				requireTrieShape(t, l)
+			})
+			t.Run("MixedAppendAndAppendSlice", func(t *testing.T) {
+				// Alternating single values and slices of awkward length makes
+				// slice copies start and end at every offset inside a leaf.
+				b := NewBatchListBuilder[int](0)
+				for i := 0; i < n; {
+					b.Append(want[i])
+					i++
+					k := min(i+(i%37), n)
+					b.AppendSlice(want[i:k])
+					i = k
+				}
+				l := b.List()
+				requireListEquals(t, l, want)
+				requireTrieShape(t, l)
+				// Appending after the build is a normal persistent operation.
+				requireListEquals(t, l.Append(-1), append(append([]int(nil), want...), -1))
+			})
+		})
+	}
 }

@@ -20,6 +20,14 @@ Changes since v0.6.0.
   - All builder methods now use pointer receivers, and the builders are invalid
     after the terminal call. Always create them with `NewSetBuilder` /
     `NewSortedSetBuilder` and do not copy them.
+- **`BatchListBuilder`** was rewritten (see Changed).
+  - `Flush` is now a deprecated no-op. Values are no longer committed in
+    batches.
+  - The size passed to `NewBatchListBuilder` is only a sizing hint; it is never
+    a limit.
+  - Like `ListBuilder`, every method (including `Len`) now panics after `List()`,
+    and a second `List()` call panics. Before, `Len` returned 0 and a second
+    `List()` returned nil. Call `Reset()` to make the builder valid again.
 - **`StreamingMapBuilder.Stream`, `Filter` and `Transform`** now take an
   `iter.Seq2[K, V]` (for example `maps.All(m)`) instead of the unexported
   `mapEntry` type, which made the methods unusable from outside the package.
@@ -39,10 +47,21 @@ Changes since v0.6.0.
 
 ### Changed
 
+- **`BatchListBuilder` is faster than `ListBuilder` at every size measured.**
+  It fills the final trie leaves directly and joins them in `List()`. Before,
+  every flush copied the whole list, so building 100,000 elements with batch
+  size 16 took 265 ms and 2.4 GiB; now it takes 0.5 ms and 1.07 MiB
+  (`ListBuilder`: 2.7 ms, 0.94 MiB). `BatchListBuilder` no longer produces slice
+  nodes larger than 32 elements.
+- **`NewList(values...)` builds the trie in one pass** instead of appending one
+  value at a time: 2.5 ms to 0.27 ms for 100,000 values (B/op +6%). The trie is
+  also one level shallower than one built by `Append`, so `Get` and `Set` on a
+  list from `NewList` are 23-39% and 22-42% faster. Values and behavior are
+  unchanged.
 - Performance claims in the README (19x, 8%, 5.8%, 6-8%) were removed and
   replaced with measured numbers from a reproducible benchmark set
-  (`scripts/bench.sh`, benchmarks named `BenchmarkBaseline_*`). The batch
-  builders do not consistently outperform `ListBuilder` / `MapBuilder`; see the
+  (`scripts/bench.sh`, benchmarks named `BenchmarkBaseline_*`).
+  `BatchMapBuilder` does not consistently outperform `MapBuilder`; see the
   README's Performance Guidelines.
 - Benchmarks were corrected so they measure what they claim (deletes of
   present keys, results kept in package-level sinks, inputs generated outside
