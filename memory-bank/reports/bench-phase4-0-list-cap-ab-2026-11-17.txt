@@ -1,0 +1,65 @@
+Phase 4.0: List.cap() fix, back-to-back A/B
+=============================================
+toolchain: go1.27.4
+date: 2026-11-17
+load: about 200 on 10 cores (heavily loaded), so only interleaved comparisons are
+      used (alternating old, new, new, old, ...). Every figure is the minimum
+      over 5 rounds of 100 ms. Allocation counts and bytes are exact.
+
+Change
+  List.cap() returned 1 << (depth*5) = 32^depth, but a root of depth d covers
+  32^(d+1) indexes (a leaf holds 32 values, each level above multiplies by 32).
+  append added a root level whenever size+origin reached the under-reported
+  value, so every list grown by Append or ListBuilder.Append was one level
+  deeper than its size needs (34 values: depth 2, minimal 1; 1,025 values:
+  depth 3, minimal 2; 32,769 values: depth 4, minimal 3). The fix is
+  1 << ((depth+1)*5).
+
+Method
+  OLD = HEAD (7c6be82) in a detached worktree plus the two new AppendBuilt
+  benchmarks. NEW = working tree. Binaries built with `go test -c`, run
+  alternately by /tmp/ab_queue.py. Lists built by NewList already had the
+  smallest depth, so List_Get / List_Set / List_New (rows near 1.0x) are the
+  noise control; the AppendBuilt rows, Append and Builder are the ones the fix
+  changes.
+
+Results (old = HEAD, new = this change; speedup = old / new)
+
+benchmark                                                       old ns      new ns  speedup      old B      new B   old al   new al
+BenchmarkBaseline_List_Append/N1000                           295586.0    184080.0    1.61x    1440914     883339     4004     3036
+BenchmarkBaseline_List_Append/N10000                         4472156.0   2784498.0    1.61x   19945880   14204268    49271    39303
+BenchmarkBaseline_List_Append/N100000                       73046292.0  55891167.0    1.31x  243856056  186276356   569423   469451
+BenchmarkBaseline_List_AppendBuiltGet/N1000                        4.9         3.0    1.62x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltGet/N10000                       6.8         5.0    1.36x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltGet/N100000                      9.0         6.8    1.31x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltSet/N1000                      280.5       191.0    1.47x       1472        896        4        3
+BenchmarkBaseline_List_AppendBuiltSet/N10000                     403.4       296.2    1.36x       2048       1472        5        4
+BenchmarkBaseline_List_AppendBuiltSet/N100000                    760.4       570.5    1.33x       2624       2048        6        5
+BenchmarkBaseline_List_Builder/N1000                           17027.0     12642.0    1.35x      15560      14984      101      100
+BenchmarkBaseline_List_Builder/N10000                         195328.0    147847.0    1.32x     102248     101672      392      391
+BenchmarkBaseline_List_Builder/N100000                       2641681.0   1965650.0    1.34x     965105     964523     3296     3295
+BenchmarkBaseline_List_Contains/N1000                          10052.0      9788.0    1.03x        896        896        1        1
+BenchmarkBaseline_List_Contains/N100000                      1005788.0    997301.0    1.01x        896        896        1        1
+BenchmarkBaseline_List_Contains/N16                               57.0        57.6    0.99x          0          0        0        0
+BenchmarkBaseline_List_Get/N1000                                   3.3         3.1    1.07x          0          0        0        0
+BenchmarkBaseline_List_Get/N10000                                  5.1         5.0    1.01x          0          0        0        0
+BenchmarkBaseline_List_Get/N100000                                 6.7         6.5    1.02x          0          0        0        0
+BenchmarkBaseline_List_New/N1000                                2148.0      2123.0    1.01x      10336      10336       35       35
+BenchmarkBaseline_List_New/N10000                              20410.0     21033.0    0.97x     101888     101888      326      326
+BenchmarkBaseline_List_New/N100000                            233655.0    240479.0    0.97x    1016707    1016705     3230     3230
+BenchmarkBaseline_List_Set/N1000                                 201.9       174.7    1.16x        896        896        3        3
+BenchmarkBaseline_List_Set/N10000                                320.4       322.5    0.99x       1472       1472        4        4
+BenchmarkBaseline_List_Set/N100000                               653.7       536.5    1.22x       2048       2048        5        5
+
+Reading the table
+  - Get on an append-built list: 1.31-1.62x faster (one pointer hop fewer).
+  - Persistent Set on an append-built list: 1.33-1.47x faster, one allocation
+    and 22-39% of the bytes fewer per Set (N=100,000: 2,624 -> 2,048 B, 6 -> 5
+    allocs), because one fewer 576 B branch node is copied.
+  - Building by the persistent Append loop: 1.3-1.6x faster, 24-39% fewer bytes
+    (N=100,000: 243.9 MB -> 186.3 MB), 17-24% fewer allocations.
+  - ListBuilder.Append: 1.3x faster.
+  - List_Get, List_Set, List_New and Contains on NewList-built lists show
+    0.97-1.22x, which is the noise of this run (the code they run is unchanged).
+  - Append at N=100,000 is still 2.4 KB and 4.7 allocations per call; that is
+    Phase 4.1-4.3.

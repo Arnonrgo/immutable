@@ -48,8 +48,11 @@ func (l *List[T]) clone() *List[T] {
 // Len returns the number of elements in the list.
 func (l *List[T]) Len() int { return l.size }
 
-// cap returns the total number of possible elements for the current depth.
-func (l *List[T]) cap() int { return 1 << (l.root.depth() * listNodeBits) }
+// cap returns the number of indexes the current root can address: a leaf holds
+// listNodeSize values and every level above it multiplies that by listNodeSize,
+// so a root of depth d covers 32^(d+1) indexes. append adds a level when the next
+// index is no longer below this value.
+func (l *List[T]) cap() int { return 1 << ((l.root.depth() + 1) * listNodeBits) }
 
 // Get returns the value at the given index. Similar to slices, this method will
 // panic if index is below zero or is greater than or equal to the list size.

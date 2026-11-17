@@ -105,6 +105,14 @@ Changes since v0.6.0.
   documented amortized O(1) `Dequeue` holds for linear use. `Peek`, `Dequeue`
   and `Iterator` on the same queue value whose front was empty used to repeat the
   O(n) reversal on every call; the reversal is now cached (see Changed).
+- `List.Append` (and `ListBuilder.Append`) added a trie level 32 times too
+  early, so every list grown by appending was one level deeper than its size
+  needs (34 values had a depth-2 trie where depth 1 holds 1,024). The size of
+  a list is now compared with the number of values a root can hold
+  (32^(depth+1)). Lists grown by `Append` are 1.3-1.6x faster to read with `Get`,
+  persistent `Set` is 1.3-1.5x faster with one allocation and 22-39% fewer bytes,
+  and building 100,000 values with `Append` allocates 24% fewer bytes. Values and
+  behavior are unchanged.
 - Corrected documentation: the default hasher and comparer cover integer and
   string types only (there is no byte-slice default), the `MapBuilder.Map` and
   `SortedMapBuilder.Map` docs and panic messages, and the "must set hasher"

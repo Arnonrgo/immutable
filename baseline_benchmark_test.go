@@ -121,6 +121,47 @@ func BenchmarkBaseline_List_Get(b *testing.B) {
 	}
 }
 
+// listFromAppends builds a list of n values with the persistent Append loop.
+func listFromAppends(n int) *List[int] {
+	l := NewList[int]()
+	for j := 0; j < n; j++ {
+		l = l.Append(j)
+	}
+	return l
+}
+
+// BenchmarkBaseline_List_AppendBuiltGet measures one Get on a list that was
+// grown by Append, whose depth depends on how Append adds levels (NewList
+// always builds the smallest depth, so List_Get does not show that).
+func BenchmarkBaseline_List_AppendBuiltGet(b *testing.B) {
+	for _, n := range benchBaselineSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			l := listFromAppends(n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkInt = l.Get(i % n)
+			}
+		})
+	}
+}
+
+// BenchmarkBaseline_List_AppendBuiltSet measures one persistent Set at a random
+// index of a list grown by Append.
+func BenchmarkBaseline_List_AppendBuiltSet(b *testing.B) {
+	for _, n := range benchBaselineSizes {
+		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
+			l := listFromAppends(n)
+			idx := benchIntKeys(n, true)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sinkAny = l.Set(int(uint(idx[i%n])%uint(n)), i)
+			}
+		})
+	}
+}
+
 // BenchmarkBaseline_List_Contains searches for a value that is not in the list,
 // so every element is compared. N16 is slice-backed; the larger sizes are
 // trie-backed (built with the persistent Append loop).
