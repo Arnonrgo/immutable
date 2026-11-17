@@ -1,0 +1,252 @@
+Phase 2.3: SortedBatchBuilder rewrite, back-to-back A/B
+=========================================================
+toolchain: go1.27.4
+date: 2026-11-17
+load: about 200 on 10 cores (heavily loaded), so only same-process, interleaved
+      comparisons are used. Every row is min or p25 over 200 rounds (60 from N=10k),
+      one GC before each build.
+
+Method
+  OLD = HEAD (affbd9b) in a detached worktree; NEW = working tree. Two test
+  binaries built with `go test -c`, each running the same TestSortedAB (a
+  variant list: SortedMapBuilder as the control, then the batch builder(s)),
+  alternated old, new, old, new, old, new; the figures below are the minimum
+  over the runs. The control (SortedMapBuilder) is identical code in both trees
+  and shows the run-to-run noise (within about 5%).
+  Inputs: seq = keys 0..N-1, rand = rand.New(rand.NewSource(7)).Int().
+  allocs and bytes are one build measured with runtime.MemStats (deterministic).
+
+Why the first version was replaced
+  The first rewrite sorted with slices.SortStableFunc. For random keys it was
+  SLOWER than the plain builder (N=100000: 25.5 ms vs 20.3 ms; N=10000: 1.89 ms
+  vs 1.40 ms). It now sorts with slices.SortFunc and breaks ties on the
+  insertion order (a uint32 seq stored per entry), which gives the same
+  last-write-wins result. The tables below are the final version.
+
+Final results: NEW SortedBatchBuilder vs SortedMapBuilder (min of mins, microseconds)
+
+keys        N |  plain min   NEW min  speedup |  plain p25   NEW p25  speedup |   allocs plain/NEW |   KB plain/NEW
+seq         8 |        0.8       0.7    1.18x |        1.3       1.1    1.23x |       13/5        |      0/1     
+seq       100 |        5.5       2.9    1.90x |        6.8       3.9    1.76x |      124/16       |      5/7     
+seq      1000 |       60.0      12.3    4.88x |       65.0      17.3    3.76x |     1175/75       |     40/65    
+seq     10000 |      754.2     119.0    6.34x |      766.2     136.5    5.61x |    11681/662      |    386/945   
+seq    100000 |     9539.3    1399.3    6.82x |    10023.6    1564.8    6.41x |   116743/6474     |   3848/7926  
+rand        8 |        0.8       0.8    1.00x |        1.1       1.1    0.96x |       13/5        |      0/1     
+rand      100 |        7.7       6.8    1.13x |        9.9       8.8    1.13x |      121/16       |      5/7     
+rand     1000 |      105.0      91.3    1.15x |      114.3      98.3    1.16x |     1172/75       |     56/65    
+rand    10000 |     1389.3    1156.2    1.20x |     1446.0    1187.8    1.22x |    11661/662      |    556/945   
+rand   100000 |    20283.6   14643.7    1.39x |    21140.3   15110.1    1.40x |   116899/6474     |   5681/7926  
+
+For reference: OLD (HEAD) SortedBatchBuilder vs the plain builder in the same runs
+(old maintainSort=true / false; speedup < 1 means slower than SortedMapBuilder)
+keys        N |  plain min  old,true      x |  old,false      x | allocs old | KB old
+seq         8 |        0.8       1.0  0.80x |        0.8  1.00x |         14 |      1
+seq       100 |        5.1       7.5  0.68x |        5.6  0.91x |        125 |      5
+seq      1000 |       60.6      81.8  0.74x |       62.7  0.97x |       1176 |     41
+seq     10000 |      734.0     944.0  0.78x |      765.2  0.96x |      11682 |    387
+seq    100000 |     9331.7   11562.6  0.81x |     9639.9  0.97x |     116744 |   3848
+rand        8 |        1.0       1.1  0.89x |        1.0  1.04x |         14 |      1
+rand      100 |        8.0      10.4  0.77x |        8.2  0.97x |        122 |      5
+rand     1000 |      107.7     131.5  0.82x |      109.1  0.99x |       1173 |     56
+rand    10000 |     1402.3    1634.4  0.86x |     1409.4  0.99x |      11662 |    557
+rand   100000 |    20312.7   22622.2  0.90x |    20721.3  0.98x |     116900 |   5681
+
+Raw rows (ROW <keys> N=<n> <variant> min=<ns> p25=<ns> allocs=<n> bytes=<n>)
+--- old run 1
+zz_sorted_ab_test.go:87: ROW seq N=8 incremental min=875 p25=1334 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_sortedflag min=1125 p25=1666 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_unsortedflag min=959 p25=1542 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=100 incremental min=5125 p25=6792 allocs=124 bytes=4864
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_sortedflag min=7500 p25=9208 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_unsortedflag min=5709 p25=7042 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=1000 incremental min=60709 p25=64042 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_sortedflag min=82375 p25=86709 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_unsortedflag min=62959 p25=66334 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=10000 incremental min=743334 p25=794542 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_sortedflag min=954250 p25=1013916 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_unsortedflag min=766083 p25=816208 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=100000 incremental min=9502542 p25=9843750 allocs=116743 bytes=3940048
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_sortedflag min=11673417 p25=12105833 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_unsortedflag min=9674500 p25=10160292 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW rand N=8 incremental min=1042 p25=1917 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_sortedflag min=1292 p25=2250 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_unsortedflag min=1167 p25=2208 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=100 incremental min=9000 p25=10542 allocs=121 bytes=5088
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_sortedflag min=11125 p25=13167 allocs=127 bytes=7376
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_unsortedflag min=8458 p25=10792 allocs=122 bytes=5600
+zz_sorted_ab_test.go:87: ROW rand N=1000 incremental min=107708 p25=114542 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_sortedflag min=134417 p25=140916 allocs=1180 bytes=58616
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_unsortedflag min=109625 p25=117166 allocs=1173 bytes=57448
+zz_sorted_ab_test.go:87: ROW rand N=10000 incremental min=1408709 p25=1470625 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_sortedflag min=1644084 p25=1705916 allocs=11667 bytes=571128
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_unsortedflag min=1409417 p25=1484875 allocs=11662 bytes=570008
+zz_sorted_ab_test.go:87: ROW rand N=100000 incremental min=21012750 p25=22357375 allocs=116900 bytes=5817232
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_sortedflag min=22974708 p25=25223708 allocs=116959 bytes=5855504
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_unsortedflag min=21088667 p25=22924458 allocs=116900 bytes=5817616
+--- old run 2
+zz_sorted_ab_test.go:87: ROW seq N=8 incremental min=833 p25=1208 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_sortedflag min=1042 p25=1500 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_unsortedflag min=833 p25=1458 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=100 incremental min=5292 p25=6917 allocs=124 bytes=4864
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_sortedflag min=7541 p25=9125 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_unsortedflag min=5625 p25=6833 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=1000 incremental min=60875 p25=63291 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_sortedflag min=82125 p25=85459 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_unsortedflag min=62792 p25=65917 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=10000 incremental min=733958 p25=773875 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_sortedflag min=944042 p25=993334 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_unsortedflag min=765208 p25=799000 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=100000 incremental min=9343167 p25=9678417 allocs=116743 bytes=3940048
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_sortedflag min=11562584 p25=11856750 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_unsortedflag min=9674917 p25=9934125 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW rand N=8 incremental min=1042 p25=1583 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_sortedflag min=1209 p25=1875 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_unsortedflag min=1084 p25=1666 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=100 incremental min=8125 p25=9709 allocs=121 bytes=5088
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_sortedflag min=10583 p25=12583 allocs=127 bytes=7376
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_unsortedflag min=8375 p25=10125 allocs=122 bytes=5600
+zz_sorted_ab_test.go:87: ROW rand N=1000 incremental min=107708 p25=116208 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_sortedflag min=131500 p25=142500 allocs=1180 bytes=58616
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_unsortedflag min=111750 p25=119416 allocs=1173 bytes=57448
+zz_sorted_ab_test.go:87: ROW rand N=10000 incremental min=1441750 p25=1495333 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_sortedflag min=1684208 p25=1756333 allocs=11667 bytes=571128
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_unsortedflag min=1446542 p25=1519250 allocs=11662 bytes=570008
+zz_sorted_ab_test.go:87: ROW rand N=100000 incremental min=20380625 p25=21677834 allocs=116899 bytes=5817120
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_sortedflag min=22622166 p25=24067334 allocs=116959 bytes=5855488
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_unsortedflag min=20952542 p25=21722167 allocs=116900 bytes=5817616
+--- old run 3
+zz_sorted_ab_test.go:87: ROW seq N=8 incremental min=875 p25=1208 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_sortedflag min=1042 p25=1500 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=8 batch_unsortedflag min=959 p25=1416 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW seq N=100 incremental min=5417 p25=7166 allocs=124 bytes=4864
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_sortedflag min=7750 p25=9417 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=100 batch_unsortedflag min=5833 p25=7459 allocs=125 bytes=5376
+zz_sorted_ab_test.go:87: ROW seq N=1000 incremental min=60583 p25=64625 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_sortedflag min=81750 p25=86542 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=1000 batch_unsortedflag min=62667 p25=67833 allocs=1176 bytes=41480
+zz_sorted_ab_test.go:87: ROW seq N=10000 incremental min=737333 p25=775583 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_sortedflag min=958500 p25=988708 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=10000 batch_unsortedflag min=782583 p25=804791 allocs=11682 bytes=395856
+zz_sorted_ab_test.go:87: ROW seq N=100000 incremental min=9331709 p25=9766000 allocs=116743 bytes=3940048
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_sortedflag min=11636208 p25=12067834 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW seq N=100000 batch_unsortedflag min=9639917 p25=9861416 allocs=116744 bytes=3940560
+zz_sorted_ab_test.go:87: ROW rand N=8 incremental min=1000 p25=1334 allocs=13 bytes=328
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_sortedflag min=1125 p25=1583 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=8 batch_unsortedflag min=959 p25=1583 allocs=14 bytes=840
+zz_sorted_ab_test.go:87: ROW rand N=100 incremental min=7958 p25=9750 allocs=121 bytes=5088
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_sortedflag min=10375 p25=12292 allocs=127 bytes=7376
+zz_sorted_ab_test.go:87: ROW rand N=100 batch_unsortedflag min=8209 p25=10084 allocs=122 bytes=5600
+zz_sorted_ab_test.go:87: ROW rand N=1000 incremental min=107750 p25=114917 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_sortedflag min=134875 p25=141583 allocs=1180 bytes=58616
+zz_sorted_ab_test.go:87: ROW rand N=1000 batch_unsortedflag min=109084 p25=117792 allocs=1173 bytes=57448
+zz_sorted_ab_test.go:87: ROW rand N=10000 incremental min=1402333 p25=1479791 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_sortedflag min=1634375 p25=1708833 allocs=11667 bytes=571128
+zz_sorted_ab_test.go:87: ROW rand N=10000 batch_unsortedflag min=1417292 p25=1486250 allocs=11662 bytes=570008
+zz_sorted_ab_test.go:87: ROW rand N=100000 incremental min=20312708 p25=21530000 allocs=116899 bytes=5817120
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_sortedflag min=22652541 p25=24074333 allocs=116960 bytes=5855600
+zz_sorted_ab_test.go:87: ROW rand N=100000 batch_unsortedflag min=20721334 p25=21612542 allocs=116900 bytes=5817616
+--- first-new (stable sort, superseded) run 1
+zz_sorted_ab_test.go:80: ROW seq N=8 incremental min=916 p25=1375 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW seq N=8 batch min=584 p25=1000 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW seq N=100 incremental min=6000 p25=7625 allocs=124 bytes=4864
+zz_sorted_ab_test.go:80: ROW seq N=100 batch min=1916 p25=3291 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW seq N=1000 incremental min=60500 p25=63708 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:80: ROW seq N=1000 batch min=10875 p25=13209 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW seq N=10000 incremental min=726667 p25=755333 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:80: ROW seq N=10000 batch min=89458 p25=99584 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW seq N=100000 incremental min=9743208 p25=10025250 allocs=116743 bytes=3940080
+zz_sorted_ab_test.go:80: ROW seq N=100000 batch min=1281584 p25=1507333 allocs=6474 bytes=6019584
+zz_sorted_ab_test.go:80: ROW rand N=8 incremental min=917 p25=1375 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW rand N=8 batch min=791 p25=1125 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW rand N=100 incremental min=8541 p25=10167 allocs=121 bytes=5088
+zz_sorted_ab_test.go:80: ROW rand N=100 batch min=8791 p25=10500 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW rand N=1000 incremental min=104958 p25=117083 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:80: ROW rand N=1000 batch min=138666 p25=149208 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW rand N=10000 incremental min=1383500 p25=1472333 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:80: ROW rand N=10000 batch min=1897625 p25=2001084 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW rand N=100000 incremental min=20244167 p25=21277625 allocs=116900 bytes=5817232
+zz_sorted_ab_test.go:80: ROW rand N=100000 batch min=25489083 p25=26507958 allocs=6474 bytes=6019584
+--- first-new (stable sort, superseded) run 2
+zz_sorted_ab_test.go:80: ROW seq N=8 incremental min=958 p25=1250 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW seq N=8 batch min=542 p25=834 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW seq N=100 incremental min=5833 p25=6875 allocs=124 bytes=4864
+zz_sorted_ab_test.go:80: ROW seq N=100 batch min=1917 p25=2834 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW seq N=1000 incremental min=59416 p25=61875 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:80: ROW seq N=1000 batch min=9416 p25=11500 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW seq N=10000 incremental min=714208 p25=739250 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:80: ROW seq N=10000 batch min=88708 p25=96167 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW seq N=100000 incremental min=9765375 p25=10162291 allocs=116743 bytes=3940064
+zz_sorted_ab_test.go:80: ROW seq N=100000 batch min=1300583 p25=1480542 allocs=6474 bytes=6019584
+zz_sorted_ab_test.go:80: ROW rand N=8 incremental min=875 p25=1292 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW rand N=8 batch min=750 p25=1000 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW rand N=100 incremental min=7916 p25=9958 allocs=121 bytes=5088
+zz_sorted_ab_test.go:80: ROW rand N=100 batch min=8375 p25=9917 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW rand N=1000 incremental min=108709 p25=119334 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:80: ROW rand N=1000 batch min=139666 p25=153917 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW rand N=10000 incremental min=1441292 p25=1504291 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:80: ROW rand N=10000 batch min=1907917 p25=2009167 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW rand N=100000 incremental min=20221208 p25=21569625 allocs=116899 bytes=5817152
+zz_sorted_ab_test.go:80: ROW rand N=100000 batch min=25975500 p25=26424958 allocs=6474 bytes=6019584
+--- first-new (stable sort, superseded) run 3
+zz_sorted_ab_test.go:80: ROW seq N=8 incremental min=875 p25=1250 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW seq N=8 batch min=542 p25=792 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW seq N=100 incremental min=5917 p25=6958 allocs=124 bytes=4864
+zz_sorted_ab_test.go:80: ROW seq N=100 batch min=2041 p25=3041 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW seq N=1000 incremental min=60375 p25=65750 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:80: ROW seq N=1000 batch min=10625 p25=14458 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW seq N=10000 incremental min=733209 p25=757167 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:80: ROW seq N=10000 batch min=92084 p25=102542 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW seq N=100000 incremental min=9780542 p25=9986208 allocs=116743 bytes=3940064
+zz_sorted_ab_test.go:80: ROW seq N=100000 batch min=1217625 p25=1402042 allocs=6474 bytes=6019584
+zz_sorted_ab_test.go:80: ROW rand N=8 incremental min=1000 p25=1958 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW rand N=8 batch min=792 p25=1542 allocs=4 bytes=712
+zz_sorted_ab_test.go:80: ROW rand N=100 incremental min=8917 p25=11250 allocs=121 bytes=5088
+zz_sorted_ab_test.go:80: ROW rand N=100 batch min=9000 p25=11125 allocs=16 bytes=5592
+zz_sorted_ab_test.go:80: ROW rand N=1000 incremental min=108208 p25=119583 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:80: ROW rand N=1000 batch min=141125 p25=153083 allocs=75 bytes=50904
+zz_sorted_ab_test.go:80: ROW rand N=10000 incremental min=1380125 p25=1469166 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:80: ROW rand N=10000 batch min=1890583 p25=1969208 allocs=662 bytes=705712
+zz_sorted_ab_test.go:80: ROW rand N=100000 incremental min=20211833 p25=22023000 allocs=116899 bytes=5817120
+zz_sorted_ab_test.go:80: ROW rand N=100000 batch min=26059833 p25=26854875 allocs=6474 bytes=6019584
+--- new run 1
+zz_sorted_ab_test.go:80: ROW seq N=8 incremental min=833 p25=1375 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW seq N=8 batch min=708 p25=1083 allocs=5 bytes=984
+zz_sorted_ab_test.go:80: ROW seq N=100 incremental min=6792 p25=8750 allocs=124 bytes=4864
+zz_sorted_ab_test.go:80: ROW seq N=100 batch min=3375 p25=5208 allocs=16 bytes=7384
+zz_sorted_ab_test.go:80: ROW seq N=1000 incremental min=59959 p25=65042 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:80: ROW seq N=1000 batch min=12292 p25=17291 allocs=75 bytes=67032
+zz_sorted_ab_test.go:80: ROW seq N=10000 incremental min=765083 p25=775083 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:80: ROW seq N=10000 batch min=121833 p25=136500 allocs=662 bytes=967600
+zz_sorted_ab_test.go:80: ROW seq N=100000 incremental min=9539334 p25=10023625 allocs=116743 bytes=3940080
+zz_sorted_ab_test.go:80: ROW seq N=100000 batch min=1399333 p25=1564834 allocs=6474 bytes=8116480
+zz_sorted_ab_test.go:80: ROW rand N=8 incremental min=834 p25=1084 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW rand N=8 batch min=833 p25=1125 allocs=5 bytes=984
+zz_sorted_ab_test.go:80: ROW rand N=100 incremental min=8125 p25=10166 allocs=121 bytes=5088
+zz_sorted_ab_test.go:80: ROW rand N=100 batch min=6791 p25=8834 allocs=16 bytes=7384
+zz_sorted_ab_test.go:80: ROW rand N=1000 incremental min=105041 p25=114333 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:80: ROW rand N=1000 batch min=91334 p25=98334 allocs=75 bytes=67032
+zz_sorted_ab_test.go:80: ROW rand N=10000 incremental min=1389292 p25=1446000 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:80: ROW rand N=10000 batch min=1156167 p25=1187833 allocs=662 bytes=967600
+zz_sorted_ab_test.go:80: ROW rand N=100000 incremental min=20283583 p25=21402250 allocs=116899 bytes=5817120
+zz_sorted_ab_test.go:80: ROW rand N=100000 batch min=14906959 p25=15291375 allocs=6474 bytes=8116480
+--- new run 2
+zz_sorted_ab_test.go:80: ROW seq N=8 incremental min=833 p25=1334 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW seq N=8 batch min=709 p25=1084 allocs=5 bytes=984
+zz_sorted_ab_test.go:80: ROW seq N=100 incremental min=5459 p25=6834 allocs=124 bytes=4864
+zz_sorted_ab_test.go:80: ROW seq N=100 batch min=2875 p25=3875 allocs=16 bytes=7384
+zz_sorted_ab_test.go:80: ROW seq N=1000 incremental min=60583 p25=65791 allocs=1175 bytes=40968
+zz_sorted_ab_test.go:80: ROW seq N=1000 batch min=13125 p25=17875 allocs=75 bytes=67032
+zz_sorted_ab_test.go:80: ROW seq N=10000 incremental min=754209 p25=766250 allocs=11681 bytes=395344
+zz_sorted_ab_test.go:80: ROW seq N=10000 batch min=119000 p25=143500 allocs=662 bytes=967600
+zz_sorted_ab_test.go:80: ROW seq N=100000 incremental min=9760375 p25=10082667 allocs=116743 bytes=3940064
+zz_sorted_ab_test.go:80: ROW seq N=100000 batch min=1464584 p25=1574625 allocs=6474 bytes=8116480
+zz_sorted_ab_test.go:80: ROW rand N=8 incremental min=958 p25=1250 allocs=13 bytes=328
+zz_sorted_ab_test.go:80: ROW rand N=8 batch min=875 p25=1208 allocs=5 bytes=984
+zz_sorted_ab_test.go:80: ROW rand N=100 incremental min=7667 p25=9917 allocs=121 bytes=5088
+zz_sorted_ab_test.go:80: ROW rand N=100 batch min=7417 p25=8792 allocs=16 bytes=7384
+zz_sorted_ab_test.go:80: ROW rand N=1000 incremental min=108000 p25=115250 allocs=1172 bytes=56936
+zz_sorted_ab_test.go:80: ROW rand N=1000 batch min=92167 p25=98500 allocs=75 bytes=67032
+zz_sorted_ab_test.go:80: ROW rand N=10000 incremental min=1389958 p25=1449334 allocs=11661 bytes=569496
+zz_sorted_ab_test.go:80: ROW rand N=10000 batch min=1163666 p25=1202917 allocs=662 bytes=967600
+zz_sorted_ab_test.go:80: ROW rand N=100000 incremental min=20417000 p25=21140292 allocs=116901 bytes=5817328
+zz_sorted_ab_test.go:80: ROW rand N=100000 batch min=14643667 p25=15110125 allocs=6474 bytes=8116480

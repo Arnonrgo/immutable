@@ -383,6 +383,28 @@ func BenchmarkBaseline_SortedMap_Builder(b *testing.B) {
 	}
 }
 
+// BenchmarkBaseline_SortedMap_BatchBuilder builds a sorted map with
+// SortedBatchBuilder.
+func BenchmarkBaseline_SortedMap_BatchBuilder(b *testing.B) {
+	for _, pattern := range []string{"seq", "rand"} {
+		for _, n := range benchBaselineSizes {
+			b.Run(fmt.Sprintf("%s/N%d", pattern, n), func(b *testing.B) {
+				keys := benchIntKeys(n, pattern == "rand")
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					builder := NewSortedBatchBuilder[int, int](nil, 32)
+					for j, k := range keys {
+						builder.Set(k, j)
+					}
+					sinkAny = builder.SortedMap()
+				}
+				reportPerElem(b, n)
+			})
+		}
+	}
+}
+
 // BenchmarkBaseline_SortedMap_Get measures one Get on a full-size sorted map.
 func BenchmarkBaseline_SortedMap_Get(b *testing.B) {
 	for _, n := range benchBaselineSizes {

@@ -59,13 +59,12 @@ Immutable structures are snapshot-based: every mutation returns a new instance; 
 - **`BatchListBuilder`**: list construction that fills the final trie leaves directly and joins them in `List()`; about 4-5x faster than `ListBuilder` at every size measured, and about 150x faster than a persistent `Append` loop at 100k elements (see [Performance Guidelines](#performance-guidelines))
 - **`BatchMapBuilder`**: buffers the entries and builds the whole trie in one pass in `Map()`; 1.4-2.2x faster than `MapBuilder` from 9 entries up and level with it up to 8, with about 45% fewer allocations (see [Performance Guidelines](#performance-guidelines))
 - **`BatchSetBuilder`** & **`BatchSortedSetBuilder`**: Efficient bulk set construction
-- **`StreamingListBuilder`** & **`StreamingMapBuilder`**: Auto-flush with functional operations (filter, transform)
-- **`SortedBatchBuilder`**: Optimized sorted map construction with optional sort maintenance
+- **`StreamingListBuilder`** & **`StreamingMapBuilder`**: the batch builders plus methods that read from a channel or iterator and filter or transform on the way in
+- **`SortedBatchBuilder`**: buffers the entries, sorts them once and builds the whole B+tree in `SortedMap()`; takes any key type with a `Comparer` and honors it (see [Performance Guidelines](#performance-guidelines))
 
 **Functional Programming Features:**
-- Stream processing with automatic memory management
+- Stream values from a channel (`StreamingListBuilder.Stream`) or an `iter.Seq2` (`StreamingMapBuilder.Stream`)
 - Filter and transform operations for bulk data processing
-- Configurable auto-flush thresholds for memory efficiency
 
 ### **Enhanced Testing & Validation**
 
@@ -531,7 +530,7 @@ m := builder.Map()
 ```
 
 If `hasher` is nil, the default hasher is chosen from the first key you `Set`.
-After `Map()` every method except `Reset()` panics, as with `MapBuilder`.
+After `Map()`, `Set`, `Len` and a second `Map()` panic until `Reset()`, as with `MapBuilder`.
 `Len()` counts `Set` calls, so it is an upper bound on the length of the map; a
 key that was set twice counts twice. `Flush()` is a deprecated no-op.
 
@@ -566,11 +565,14 @@ iteration results do not depend on it.
 
 ### Streaming Builders
 
-Streaming builders provide auto-flush capabilities and functional operations:
+Streaming builders are the batch builders with extra methods that take their
+input from a channel or an iterator, or filter or transform it on the way in.
+They add no state and no speed of their own, so they perform as the batch
+builder they wrap:
 
 ```go
-// Streaming list builder with auto-flush at 1000 elements
-builder := immutable.NewStreamingListBuilder[int](32, 1000)
+// The argument is a sizing hint, as for NewBatchListBuilder.
+builder := immutable.NewStreamingListBuilder[int](32)
 
 // Functional operations
 data := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
@@ -581,20 +583,21 @@ builder.Filter(data, func(x int) bool { return x%2 == 0 })
 // Transform by doubling
 builder.Transform(data, func(x int) int { return x * 2 })
 
+// Or append everything received on a channel until it is closed
+// builder.Stream(ch)
+
 list := builder.List() // Contains processed elements
 ```
 
 ```go
-// Streaming map builder with auto-flush and bulk operations
-builder := immutable.NewStreamingMapBuilder[int, string](nil, 32, 500)
+builder := immutable.NewStreamingMapBuilder[int, string](nil, 32)
 
-// Add individual entries (auto-flushes at 500 elements)
 for i := 0; i < 1000; i++ {
     builder.Set(i, fmt.Sprintf("value-%d", i))
 }
 
-// Bulk operations with auto-flush
-builder.SetMany(map[int]string{10: "ten", 20: "twenty", 30: "thirty"})
+// Stream from any iter.Seq2, such as maps.All, and filter or transform it
+builder.Stream(maps.All(map[int]string{10: "ten", 20: "twenty", 30: "thirty"}))
 
 m := builder.Map()
 ```
@@ -612,29 +615,40 @@ builder.AddSlice(values)
 
 set := builder.Set() // Contains 3 unique values
 
-// Sorted set builder with sort maintenance
-sortedBuilder := immutable.NewBatchSortedSetBuilder[int](nil, 32, true)
+// Sorted set builder: values may be added in any order
+sortedBuilder := immutable.NewBatchSortedSetBuilder[int](nil, 32)
 numbers := []int{5, 2, 8, 1, 9, 3}
 sortedBuilder.AddSlice(numbers)
 
-sortedSet := sortedBuilder.SortedSet() // Automatically sorted: [1, 2, 3, 5, 8, 9]
+sortedSet := sortedBuilder.SortedSet() // Sorted: [1, 2, 3, 5, 8, 9]
 ```
 
 ### Sorted Batch Builder
 
-For sorted maps, use `SortedBatchBuilder` with optional sort maintenance:
+`SortedBatchBuilder` buffers the entries and builds the whole B+tree at once in
+`SortedMap()`. The entries are sorted once with the map's `Comparer` (not at all
+when they were added in strictly increasing order) and cut into leaves and
+branches, so every node is allocated once at its final size and no key is
+searched for. The result is the map that calling `Set` for each entry in order
+would give: the last value for a key wins, and keys the `Comparer` calls equal
+are one key.
 
 ```go
-// Maintain sort order in buffer for optimal insertion
-builder := immutable.NewSortedBatchBuilder[int, string](nil, 32, true)
+// The second argument is only a sizing hint.
+builder := immutable.NewSortedBatchBuilder[int, string](nil, 32)
 
-// Add in random order - automatically maintained in sorted buffer
+// Add in any order
 builder.Set(3, "three")
 builder.Set(1, "one")
 builder.Set(2, "two")
 
-sm := builder.SortedMap() // Efficiently constructed sorted map
+sm := builder.SortedMap() // Sorted map: 1, 2, 3
 ```
+
+The key type is any type with a `Comparer`, not only `cmp.Ordered` ones, and a
+custom `Comparer` decides the order. Like the other batch builders it is invalid
+after `SortedMap()`: `Set`, `Len` and a second `SortedMap()` panic until `Reset()`.
+`Len()` counts `Set` calls, so it is an upper bound on the size of the map.
 
 ### Performance Guidelines
 
@@ -643,11 +657,13 @@ sm := builder.SortedMap() // Efficiently constructed sorted map
 - `BatchListBuilder` is faster than `ListBuilder` at every size measured (1k, 10k and 100k elements), by about 4-5x. Use it whenever you only append. If you already hold the values in a slice, `NewList(values...)` is faster again. Use `ListBuilder` when you need to `Set`, `Prepend`, `Slice` or `Get` while building.
 - `BatchMapBuilder` is 1.4-2.2x faster than `MapBuilder` from 9 entries up, level with it up to 8, and allocates about 45% fewer objects but 10-50% more bytes (the buffered entries and the sort scratch space). Use it whenever you only add entries; use `MapBuilder` when you need `Get` or `Delete` while building.
 - `BatchSetBuilder` builds on `BatchMapBuilder` and behaves the same.
-- Streaming builders add auto-flush and functional operations (`Filter`, `Transform`); they are a convenience, not a speed-up.
+- `SortedBatchBuilder` is 1.1-1.4x faster than `SortedMapBuilder` for random keys (100 to 100,000 entries) and 1.9-6.8x faster when the keys are added in increasing order, which it detects and builds without sorting; level with it up to 8 entries. It allocates 87-94% fewer objects and 1.2-2.5x the bytes (the buffered entries exist next to the result while it is built). Use it whenever you only add entries; use `SortedMapBuilder` when you need `Get` or `Delete` while building. `BatchSortedSetBuilder` builds on it.
+- Streaming builders add input sources and functional operations (`Stream`, `Filter`, `Transform`); they are a convenience, not a speed-up.
 
 **Batch size:**
 - `BatchListBuilder`: the size argument is only a sizing hint and does not change the speed.
 - `BatchMapBuilder`: the size argument is only a sizing hint and does not change the speed.
+- `SortedBatchBuilder`: the same.
 
 These are measurements of the current implementation, not guarantees. The
 numbers will be refreshed as the batch builders are reworked.
@@ -671,6 +687,7 @@ Please submit issues relating to bugs & documentation improvements.
 - Small-structure fast paths:
   - List: `NewList(values...)` and `BatchListBuilder` build the trie bottom-up in one pass (the 2025-09 batch flush that extended a slice in place was replaced because it copied the whole list on every flush)
   - Map: `BatchMapBuilder` builds the whole trie in one pass in `Map()` (last-write-wins, `Hasher` equality); tiny array-node updates applied in-place when under threshold
+  - SortedMap: `SortedBatchBuilder` sorts the entries once (not at all if they arrive in increasing order) and builds the whole B+tree in `SortedMap()`
 - New builder APIs:
   - `(*BatchListBuilder).Reset()` and `(*BatchMapBuilder).Reset()` for builder reuse without reallocations
 - Concurrency:

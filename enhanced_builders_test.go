@@ -171,30 +171,46 @@ func TestBatchSetBuilder(t *testing.T) {
 
 // TestStreamingListBuilder tests streaming list operations
 func TestStreamingListBuilder(t *testing.T) {
-	t.Run("AutoFlush", func(t *testing.T) {
-		builder := NewStreamingListBuilder[int](3, 6) // autoFlush at 6
+	t.Run("Stream", func(t *testing.T) {
+		builder := NewStreamingListBuilder[int](3)
 
-		// Add values without reaching auto-flush threshold
-		for i := 1; i <= 5; i++ {
-			builder.Append(i)
+		// More values than one leaf holds, so the list is a real trie.
+		const n = 5*listNodeSize + 7
+		ch := make(chan int)
+		go func() {
+			defer close(ch)
+			for i := 0; i < n; i++ {
+				ch <- i
+			}
+		}()
+		builder.Stream(ch)
+
+		if builder.Len() != n {
+			t.Errorf("Len() = %d before List(), want %d", builder.Len(), n)
 		}
-
-		// Should not have auto-flushed yet
-		if builder.Len() != 5 {
-			t.Errorf("Expected length 5 before auto-flush, got %d", builder.Len())
-		}
-
-		// Add one more to trigger auto-flush
-		builder.Append(6)
-
 		list := builder.List()
-		if list.Len() != 6 {
-			t.Errorf("Expected final length 6, got %d", list.Len())
+		if list.Len() != n {
+			t.Fatalf("List().Len() = %d, want %d", list.Len(), n)
+		}
+		for i := 0; i < n; i++ {
+			if got := list.Get(i); got != i {
+				t.Fatalf("list[%d] = %d, want %d", i, got, i)
+			}
+		}
+	})
+
+	t.Run("StreamEmptyChannel", func(t *testing.T) {
+		builder := NewStreamingListBuilder[int](0)
+		ch := make(chan int)
+		close(ch)
+		builder.Stream(ch)
+		if got := builder.List().Len(); got != 0 {
+			t.Errorf("List().Len() = %d, want 0", got)
 		}
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		builder := NewStreamingListBuilder[int](5, 0)
+		builder := NewStreamingListBuilder[int](5)
 		values := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
 		// Filter only even numbers
@@ -215,7 +231,7 @@ func TestStreamingListBuilder(t *testing.T) {
 	})
 
 	t.Run("Transform", func(t *testing.T) {
-		builder := NewStreamingListBuilder[int](5, 0)
+		builder := NewStreamingListBuilder[int](5)
 		values := []int{1, 2, 3, 4, 5}
 
 		// Transform by doubling
@@ -238,7 +254,7 @@ func TestStreamingListBuilder(t *testing.T) {
 // TestStreamingMapBuilder tests streaming map operations
 func TestStreamingMapBuilder(t *testing.T) {
 	t.Run("BasicOperations", func(t *testing.T) {
-		builder := NewStreamingMapBuilder[int, string](nil, 3, 6)
+		builder := NewStreamingMapBuilder[int, string](nil, 3)
 
 		for i := 1; i <= 5; i++ {
 			builder.Set(i, fmt.Sprintf("value-%d", i))
@@ -258,7 +274,7 @@ func TestStreamingMapBuilder(t *testing.T) {
 	})
 
 	t.Run("SetMany", func(t *testing.T) {
-		builder := NewStreamingMapBuilder[string, int](nil, 2, 0)
+		builder := NewStreamingMapBuilder[string, int](nil, 2)
 		entries := map[string]int{"a": 1, "b": 2, "c": 3, "d": 4}
 
 		builder.SetMany(entries)
@@ -276,7 +292,7 @@ func TestStreamingMapBuilder(t *testing.T) {
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		builder := NewStreamingMapBuilder[int, string](nil, 5, 0)
+		builder := NewStreamingMapBuilder[int, string](nil, 5)
 		entries := map[int]string{1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
 
 		builder.Filter(maps.All(entries), func(k int, v string) bool { return k%2 == 0 })
@@ -296,7 +312,7 @@ func TestStreamingMapBuilder(t *testing.T) {
 	})
 
 	t.Run("Stream", func(t *testing.T) {
-		builder := NewStreamingMapBuilder[string, int](nil, 3, 6)
+		builder := NewStreamingMapBuilder[string, int](nil, 3)
 		entries := map[string]int{"a": 1, "b": 2, "c": 3}
 
 		builder.Stream(maps.All(entries))
@@ -313,7 +329,7 @@ func TestStreamingMapBuilder(t *testing.T) {
 	})
 
 	t.Run("Transform", func(t *testing.T) {
-		builder := NewStreamingMapBuilder[int, int](nil, 5, 0)
+		builder := NewStreamingMapBuilder[int, int](nil, 5)
 		entries := map[int]int{1: 10, 2: 20, 3: 30}
 
 		builder.Transform(maps.All(entries), func(k, v int) (int, int) { return k * 10, v * 2 })
@@ -333,8 +349,8 @@ func TestStreamingMapBuilder(t *testing.T) {
 
 // TestSortedBatchBuilder tests sorted batch operations
 func TestSortedBatchBuilder(t *testing.T) {
-	t.Run("SortedBuffer", func(t *testing.T) {
-		builder := NewSortedBatchBuilder[int, string](nil, 3, true) // maintain sort
+	t.Run("RandomOrder", func(t *testing.T) {
+		builder := NewSortedBatchBuilder[int, string](nil, 3)
 
 		// Add in random order
 		builder.Set(3, "three")
@@ -361,8 +377,8 @@ func TestSortedBatchBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("UnsortedBuffer", func(t *testing.T) {
-		builder := NewSortedBatchBuilder[int, string](nil, 5, false) // don't maintain sort
+	t.Run("DescendingOrder", func(t *testing.T) {
+		builder := NewSortedBatchBuilder[int, string](nil, 5)
 
 		for i := 5; i >= 1; i-- {
 			builder.Set(i, fmt.Sprintf("value-%d", i))
@@ -390,7 +406,7 @@ func TestSortedBatchBuilder(t *testing.T) {
 // TestBatchSortedSetBuilder tests batch sorted set construction
 func TestBatchSortedSetBuilder(t *testing.T) {
 	t.Run("BasicOperations", func(t *testing.T) {
-		builder := NewBatchSortedSetBuilder[int](nil, 3, true)
+		builder := NewBatchSortedSetBuilder[int](nil, 3)
 
 		// Add in random order
 		values := []int{5, 2, 8, 1, 9, 3}
@@ -417,7 +433,7 @@ func TestBatchSortedSetBuilder(t *testing.T) {
 	})
 
 	t.Run("AddSlice", func(t *testing.T) {
-		builder := NewBatchSortedSetBuilder[string](nil, 5, false)
+		builder := NewBatchSortedSetBuilder[string](nil, 5)
 		values := []string{"zebra", "apple", "banana", "apple", "cherry"} // "apple" is duplicate
 
 		builder.AddSlice(values)

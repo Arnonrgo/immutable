@@ -33,8 +33,8 @@ Changes since v0.6.0.
     batches.
   - The size passed to `NewBatchMapBuilder` / `NewBatchSetBuilder` is only a
     sizing hint; it is never a limit.
-  - Like `MapBuilder`, every method except `Reset` (including `Len`) now panics
-    after `Map()` / `Set()`, and a second `Map()` call panics. Before, a second
+  - Like `MapBuilder`, `Set` / `Add` and `Len` now panic after `Map()` / `Set()`,
+    and so does a second `Map()` call. Before, a second
     `Map()` returned nil and `BatchSetBuilder.Set()` could return nil. Call
     `Reset()` on a `BatchMapBuilder` to make it valid again.
   - `Len()` counts `Set` / `Add` calls, so it is an upper bound on the size of
@@ -43,12 +43,47 @@ Changes since v0.6.0.
   - When no hasher is given, the default hasher is chosen at the first `Set`,
     so a key type with no default hasher panics there. Before it panicked at the
     first flush, which was the `batchSize`-th `Set` or `Map()`.
+- **`SortedBatchBuilder`** and **`BatchSortedSetBuilder`** were rewritten (see
+  Changed and Fixed).
+  - The `maintainSort` argument was removed:
+    `NewSortedBatchBuilder(comparer, batchSize, maintainSort)` is now
+    `NewSortedBatchBuilder(comparer, batchSize)`, and
+    `NewBatchSortedSetBuilder(comparer, batchSize, maintainSort)` is now
+    `NewBatchSortedSetBuilder(comparer, batchSize)`. The entries are always
+    sorted once, when the map is built.
+  - `Flush` is now a deprecated no-op, and the size is only a sizing hint.
+  - Like `SortedMapBuilder`, `Set` / `Add` and `Len` panic after `SortedMap()` /
+    `SortedSet()`, and so does a second call; call `Reset()` on a
+    `SortedBatchBuilder` to make it valid again. Before, a second `SortedMap()`
+    returned nil and `SortedSet()` returned nil.
+  - `Len()` counts `Set` / `Add` calls, so it is an upper bound on the size of
+    the result. It used to count distinct keys flushed plus buffered entries.
+  - When no comparer is given, the default comparer is chosen at the first
+    `Set`, so a key type with no default comparer panics there.
+- **`StreamingListBuilder` and `StreamingMapBuilder` lost auto-flush.** Because
+  the batch builders no longer flush, the `autoFlushSize` argument had no effect
+  and was removed: `NewStreamingListBuilder(batchSize, autoFlushSize)` is now
+  `NewStreamingListBuilder(batchSize)` and
+  `NewStreamingMapBuilder(hasher, batchSize, autoFlushSize)` is now
+  `NewStreamingMapBuilder(hasher, batchSize)`. `StreamingMapBuilder.SetMany` is
+  deprecated in favor of `SetMap`, which it now calls.
 - **`StreamingMapBuilder.Stream`, `Filter` and `Transform`** now take an
   `iter.Seq2[K, V]` (for example `maps.All(m)`) instead of the unexported
   `mapEntry` type, which made the methods unusable from outside the package.
 
 ### Fixed
 
+- `SortedBatchBuilder` with `maintainSort` set kept the **first** value of a key
+  that was set twice (`Set(1, "a"); Set(1, "b")` gave "a"), unlike every other
+  path and unlike `SortedMapBuilder`. The last value wins on every path now.
+- `SortedBatchBuilder` with `maintainSort` set ordered its buffer by Go's `<` on
+  the key instead of by the `Comparer`. When a custom `Comparer` treated two
+  different keys as equal (for example a case-insensitive one), which key and
+  value won was decided by their natural order, not by which was set last
+  (`Set("a", 1); Set("A", 2)` kept `"a"` with 1). The `Comparer` now decides
+  order and key equality everywhere, the last `Set` wins key and value, and the
+  key type is `any` instead of `cmp.Ordered`, so keys that `<` cannot order work
+  with a `Comparer`.
 - `BatchMapBuilder` compares keys with the `Hasher` on every path. The old code
   used Go equality (a Go map, or `==`) for buffers over 8 entries and when no
   hasher was set yet, which disagrees with a custom `Hasher` whose `Equal` is
@@ -86,6 +121,15 @@ Changes since v0.6.0.
   `BatchSetBuilder` builds on it and gets the same gain. Entries whose keys
   share a full 32-bit hash may be kept in a different order inside their
   collision node than `Set` would give; lookups and iteration are unaffected.
+- **`SortedBatchBuilder` is faster than `SortedMapBuilder`**, which the old one
+  never was (it was 0.7-1.0x). `SortedMap()` sorts the entries once, not at all
+  when they were added in strictly increasing order, and cuts them into leaves
+  and branches, so every node is allocated once at its final size. Back to back
+  in one process: 1.1-1.4x faster for random keys (100 to 100,000 entries),
+  1.9-6.8x faster for increasing keys, level at 8 entries or fewer; allocations
+  drop 87-94% (100,000 random keys: 116,900 to 6,474). Bytes allocated rise to
+  1.2-2.5x because the buffer exists next to the result while it is built.
+  Leaves are balanced (33 entries become 16 + 17) and no node is underfull.
 - **`NewList(values...)` builds the trie in one pass** instead of appending one
   value at a time: 2.5 ms to 0.27 ms for 100,000 values (B/op +6%). The trie is
   also one level shallower than one built by `Append`, so `Get` and `Set` on a

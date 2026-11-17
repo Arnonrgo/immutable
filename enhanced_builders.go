@@ -1,9 +1,6 @@
 package immutable
 
-import (
-	"cmp"
-	"iter"
-)
+import "iter"
 
 // BatchListBuilder builds a List from a sequence of appends. Values are written
 // straight into the 32-wide leaf nodes of the final trie, and List only joins
@@ -154,14 +151,19 @@ func (b *BatchMapBuilder[K, V]) Set(key K, value V) {
 	if b.hasher == nil {
 		b.hasher = NewHasher(key)
 	}
-	if len(b.entries) == cap(b.entries) {
-		// Double by hand. append grows large slices by about 1.25x, which
-		// leaves about four times the final size behind as garbage.
-		grown := make([]mapEntry[K, V], len(b.entries), max(2*len(b.entries), 8))
-		copy(grown, b.entries)
-		b.entries = grown
+	b.entries = appendDoubling(b.entries, mapEntry[K, V]{key: key, value: value})
+}
+
+// appendDoubling appends e to s, doubling the capacity when it is full. append
+// grows large slices by only about 1.25x, which leaves about four times the
+// final size behind as garbage while a batch builder collects its entries.
+func appendDoubling[T any](s []T, e T) []T {
+	if len(s) == cap(s) {
+		grown := make([]T, len(s), max(2*len(s), 8))
+		copy(grown, s)
+		s = grown
 	}
-	b.entries = append(b.entries, mapEntry[K, V]{key: key, value: value})
+	return append(s, e)
 }
 
 // SetMap adds all entries from a regular Go map.
@@ -184,8 +186,8 @@ func (b *BatchMapBuilder[K, V]) Reset() {
 	b.done = false
 }
 
-// Map returns the final map and invalidates the builder; every other method
-// panics afterwards, except Reset.
+// Map returns the final map and invalidates the builder: Set, Len and a second
+// call to Map panic until Reset is called.
 func (b *BatchMapBuilder[K, V]) Map() *Map[K, V] {
 	assert(!b.done, "immutable.BatchMapBuilder.Map(): duplicate call to fetch map")
 	root, size := buildMapRoot(b.entries, b.hasher)
@@ -204,32 +206,23 @@ func (b *BatchMapBuilder[K, V]) Len() int {
 	return len(b.entries)
 }
 
-// StreamingListBuilder provides streaming operations with configurable flush triggers.
+// StreamingListBuilder is a BatchListBuilder with methods that take their
+// values from a channel, or filter or transform them on the way in. It adds no
+// state of its own, so everything said about BatchListBuilder applies.
 type StreamingListBuilder[T any] struct {
 	*BatchListBuilder[T]
-	autoFlushSize    int
-	autoFlushEnabled bool
 }
 
-// NewStreamingListBuilder creates a builder with automatic flush capabilities.
-func NewStreamingListBuilder[T any](batchSize, autoFlushSize int) *StreamingListBuilder[T] {
-	return &StreamingListBuilder[T]{
-		BatchListBuilder: NewBatchListBuilder[T](batchSize),
-		autoFlushSize:    max(autoFlushSize, batchSize),
-		autoFlushEnabled: autoFlushSize > 0,
-	}
+// NewStreamingListBuilder creates a streaming list builder. batchSize is a hint
+// for how many values will be appended, as for NewBatchListBuilder.
+func NewStreamingListBuilder[T any](batchSize int) *StreamingListBuilder[T] {
+	return &StreamingListBuilder[T]{BatchListBuilder: NewBatchListBuilder[T](batchSize)}
 }
 
-// Stream processes values through a streaming pipeline.
-// Automatically flushes when size thresholds are reached.
+// Stream appends every value received from the channel until it is closed.
 func (b *StreamingListBuilder[T]) Stream(values <-chan T) {
 	for value := range values {
 		b.Append(value)
-
-		// Auto-flush when reaching threshold
-		if b.autoFlushEnabled && b.Len() >= b.autoFlushSize {
-			b.Flush()
-		}
 	}
 }
 
@@ -249,78 +242,72 @@ func (b *StreamingListBuilder[T]) Transform(values []T, transformFn func(T) T) {
 	}
 }
 
-// SortedBatchBuilder provides batch operations optimized for sorted data.
-type SortedBatchBuilder[K cmp.Ordered, V any] struct {
-	sm        *SortedMap[K, V]
-	batchSize int
-	buffer    []mapEntry[K, V]
-	sorted    bool // whether buffer is kept sorted
+// SortedBatchBuilder builds a SortedMap from a sequence of Set calls. It buffers
+// the entries and builds the whole B+tree at once in SortedMap(): the entries
+// are sorted with the map's Comparer (not at all when they arrive in strictly
+// increasing order) and then cut into leaves and branches, so every node is
+// allocated once at its final size. The result holds the same entries that
+// calling Set for each one in order would give; the last value for a key wins.
+type SortedBatchBuilder[K, V any] struct {
+	comparer Comparer[K]
+	entries  []sortedBuildEntry[K, V]
+	done     bool
 }
 
-// NewSortedBatchBuilder creates a batch builder for sorted maps.
-// If maintainSort is true, entries are kept sorted in the buffer for optimal insertion.
-func NewSortedBatchBuilder[K cmp.Ordered, V any](comparer Comparer[K], batchSize int, maintainSort bool) *SortedBatchBuilder[K, V] {
+// NewSortedBatchBuilder returns a new batch builder for sorted maps. If comparer
+// is nil, a default comparer is chosen from the first key, as in NewSortedMap.
+// batchSize is only a hint for how many entries to make room for up front; the
+// builder grows past it as needed. A value of zero or less means 32.
+func NewSortedBatchBuilder[K, V any](comparer Comparer[K], batchSize int) *SortedBatchBuilder[K, V] {
 	if batchSize <= 0 {
 		batchSize = 32
 	}
 	return &SortedBatchBuilder[K, V]{
-		sm:        NewSortedMap[K, V](comparer),
-		batchSize: batchSize,
-		buffer:    make([]mapEntry[K, V], 0, batchSize),
-		sorted:    maintainSort,
+		comparer: comparer,
+		entries:  make([]sortedBuildEntry[K, V], 0, batchSize),
 	}
 }
 
-// Set adds a key/value pair, maintaining sort order if enabled.
+// Set adds a key/value pair. Setting a key again replaces its value.
 func (b *SortedBatchBuilder[K, V]) Set(key K, value V) {
-	entry := mapEntry[K, V]{key: key, value: value}
-
-	if b.sorted && len(b.buffer) > 0 {
-		// Insert in sorted position
-		insertIdx := 0
-		for i, existing := range b.buffer {
-			if defaultCompare(key, existing.key) <= 0 {
-				insertIdx = i
-				break
-			}
-			insertIdx = i + 1
-		}
-
-		// Insert at correct position
-		b.buffer = append(b.buffer, mapEntry[K, V]{})
-		copy(b.buffer[insertIdx+1:], b.buffer[insertIdx:])
-		b.buffer[insertIdx] = entry
-	} else {
-		// Simple append
-		b.buffer = append(b.buffer, entry)
+	assert(!b.done, "immutable.SortedBatchBuilder: builder invalid after SortedMap() invocation")
+	if b.comparer == nil {
+		b.comparer = NewComparer(key)
 	}
-
-	if len(b.buffer) >= b.batchSize {
-		b.Flush()
-	}
+	b.entries = appendDoubling(b.entries, sortedBuildEntry[K, V]{key: key, value: value, seq: uint32(len(b.entries))})
 }
 
-// Flush commits buffered entries to the sorted map.
-func (b *SortedBatchBuilder[K, V]) Flush() {
-	if len(b.buffer) == 0 {
-		return
-	}
+// Flush does nothing. The map is built once, by SortedMap().
+//
+// Deprecated: Flush has no effect and is kept only so existing callers compile.
+func (b *SortedBatchBuilder[K, V]) Flush() {}
 
-	// Batch set all buffered entries
-	for _, entry := range b.buffer {
-		b.sm = b.sm.set(entry.key, entry.value, true)
-	}
-
-	// Clear buffer
-	b.buffer = b.buffer[:0]
+// Reset discards all entries so the builder can be reused, including after
+// SortedMap(). The comparer is kept.
+func (b *SortedBatchBuilder[K, V]) Reset() {
+	clear(b.entries)
+	b.entries = b.entries[:0]
+	b.done = false
 }
 
-// SortedMap returns the final sorted map.
+// SortedMap returns the final sorted map and invalidates the builder: Set, Len
+// and a second call to SortedMap panic until Reset is called.
 func (b *SortedBatchBuilder[K, V]) SortedMap() *SortedMap[K, V] {
-	b.Flush()
-	sm := b.sm
-	b.sm = nil
+	assert(!b.done, "immutable.SortedBatchBuilder.SortedMap(): duplicate call to fetch sorted map")
+	root, size := buildSortedMapRoot(b.entries, b.comparer)
+	sm := &SortedMap[K, V]{size: size, root: root, comparer: b.comparer}
+	clear(b.entries)
+	b.entries = nil
+	b.done = true
 	return sm
+}
+
+// Len returns the number of Set calls so far. A key that was set more than once
+// counts each time, so this is an upper bound on the length of the map; the
+// exact length is known once SortedMap() has built it.
+func (b *SortedBatchBuilder[K, V]) Len() int {
+	assert(!b.done, "immutable.SortedBatchBuilder: builder invalid after SortedMap() invocation")
+	return len(b.entries)
 }
 
 // BatchSetBuilder provides enhanced batch operations for efficient Set construction.
@@ -352,8 +339,8 @@ func (b *BatchSetBuilder[T]) AddSlice(values []T) {
 // Deprecated: Flush has no effect and is kept only so existing callers compile.
 func (b *BatchSetBuilder[T]) Flush() {}
 
-// Set returns the final set and invalidates the builder; every other method
-// panics afterwards.
+// Set returns the final set and invalidates the builder: Add, Len and a second
+// call to Set panic afterwards.
 func (b *BatchSetBuilder[T]) Set() *Set[T] {
 	return &Set[T]{m: b.mapBuilder.Map()}
 }
@@ -364,19 +351,21 @@ func (b *BatchSetBuilder[T]) Len() int {
 	return b.mapBuilder.Len()
 }
 
-// BatchSortedSetBuilder provides enhanced batch operations for efficient SortedSet construction.
-type BatchSortedSetBuilder[T cmp.Ordered] struct {
+// BatchSortedSetBuilder builds a SortedSet from a sequence of Add calls, with
+// the speed of SortedBatchBuilder.
+type BatchSortedSetBuilder[T any] struct {
 	sortedBuilder *SortedBatchBuilder[T, struct{}]
 }
 
 // NewBatchSortedSetBuilder returns a new batch-optimized sorted set builder.
-func NewBatchSortedSetBuilder[T cmp.Ordered](comparer Comparer[T], batchSize int, maintainSort bool) *BatchSortedSetBuilder[T] {
+// comparer and batchSize are passed to NewSortedBatchBuilder.
+func NewBatchSortedSetBuilder[T any](comparer Comparer[T], batchSize int) *BatchSortedSetBuilder[T] {
 	return &BatchSortedSetBuilder[T]{
-		sortedBuilder: NewSortedBatchBuilder[T, struct{}](comparer, batchSize, maintainSort),
+		sortedBuilder: NewSortedBatchBuilder[T, struct{}](comparer, batchSize),
 	}
 }
 
-// Add inserts a value into the batch buffer, maintaining sort order if enabled.
+// Add inserts a value into the set being built.
 func (b *BatchSortedSetBuilder[T]) Add(value T) {
 	b.sortedBuilder.Set(value, struct{}{})
 }
@@ -388,50 +377,41 @@ func (b *BatchSortedSetBuilder[T]) AddSlice(values []T) {
 	}
 }
 
-// Flush commits buffered values to the sorted set.
-func (b *BatchSortedSetBuilder[T]) Flush() {
-	b.sortedBuilder.Flush()
-}
+// Flush does nothing. The set is built once, by SortedSet().
+//
+// Deprecated: Flush has no effect and is kept only so existing callers compile.
+func (b *BatchSortedSetBuilder[T]) Flush() {}
 
-// SortedSet returns the final sorted set.
+// SortedSet returns the final sorted set and invalidates the builder: Add, Len
+// and a second call to SortedSet panic afterwards.
 func (b *BatchSortedSetBuilder[T]) SortedSet() *SortedSet[T] {
-	sm := b.sortedBuilder.SortedMap()
-	if sm == nil {
-		return nil
-	}
-	return &SortedSet[T]{m: sm}
+	return &SortedSet[T]{m: b.sortedBuilder.SortedMap()}
 }
 
-// Len returns the total number of elements (committed + buffered).
+// Len returns the number of Add calls so far. A value that was added more than
+// once counts each time, so this is an upper bound on the size of the set.
 func (b *BatchSortedSetBuilder[T]) Len() int {
-	return b.sortedBuilder.sm.Len() + len(b.sortedBuilder.buffer)
+	return b.sortedBuilder.Len()
 }
 
-// StreamingMapBuilder provides streaming operations with configurable flush triggers for Maps.
+// StreamingMapBuilder is a BatchMapBuilder with methods that take their entries
+// from an iterator, or filter or transform them on the way in. It adds no state
+// of its own, so everything said about BatchMapBuilder applies.
 type StreamingMapBuilder[K comparable, V any] struct {
 	*BatchMapBuilder[K, V]
-	autoFlushSize    int
-	autoFlushEnabled bool
 }
 
-// NewStreamingMapBuilder creates a map builder with automatic flush capabilities.
-func NewStreamingMapBuilder[K comparable, V any](hasher Hasher[K], batchSize, autoFlushSize int) *StreamingMapBuilder[K, V] {
-	return &StreamingMapBuilder[K, V]{
-		BatchMapBuilder:  NewBatchMapBuilder[K, V](hasher, batchSize),
-		autoFlushSize:    max(autoFlushSize, batchSize),
-		autoFlushEnabled: autoFlushSize > 0,
-	}
+// NewStreamingMapBuilder creates a streaming map builder. hasher and batchSize
+// are passed to NewBatchMapBuilder.
+func NewStreamingMapBuilder[K comparable, V any](hasher Hasher[K], batchSize int) *StreamingMapBuilder[K, V] {
+	return &StreamingMapBuilder[K, V]{BatchMapBuilder: NewBatchMapBuilder[K, V](hasher, batchSize)}
 }
 
-// Stream processes key/value pairs from an iterator.
+// Stream adds every key/value pair from the iterator.
 // Use maps.All(m) to stream from a Go map, or provide any iter.Seq2 source.
 func (b *StreamingMapBuilder[K, V]) Stream(seq iter.Seq2[K, V]) {
 	for key, value := range seq {
 		b.Set(key, value)
-
-		if b.autoFlushEnabled && b.Len() >= b.autoFlushSize {
-			b.Flush()
-		}
 	}
 }
 
@@ -452,14 +432,10 @@ func (b *StreamingMapBuilder[K, V]) Transform(seq iter.Seq2[K, V], transformFn f
 	}
 }
 
-// SetMany adds multiple key/value pairs efficiently from a map.
+// SetMany adds all entries from a Go map.
+//
+// Deprecated: SetMany is the same as SetMap and is kept only so existing callers
+// compile.
 func (b *StreamingMapBuilder[K, V]) SetMany(entries map[K]V) {
-	for key, value := range entries {
-		b.Set(key, value)
-
-		// Auto-flush when reaching threshold
-		if b.autoFlushEnabled && b.Len() >= b.autoFlushSize {
-			b.Flush()
-		}
-	}
+	b.SetMap(entries)
 }
