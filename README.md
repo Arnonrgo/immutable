@@ -253,7 +253,7 @@ for !itr.Done() {
 b := immutable.NewQueueBuilder[int]()
 b.Enqueue(10)
 b.EnqueueSlice([]int{20, 30})
-finalQ := b.Queue()
+finalQ := b.Queue() // the builder is now invalid: every method, including Queue(), panics
 ```
 
 Thread safety: operations return new queues; existing instances are never mutated, so concurrent reads are safe.

@@ -84,6 +84,16 @@ Changes since v0.6.0.
   order and key equality everywhere, the last `Set` wins key and value, and the
   key type is `any` instead of `cmp.Ordered`, so keys that `<` cannot order work
   with a `Comparer`.
+- `QueueBuilder`, `SetBuilder` and `SortedSetBuilder` record "already built" in
+  a flag instead of a nil pointer, so a builder that was never initialised is no
+  longer mistaken for a used one. A zero-value `SetBuilder` or `SortedSetBuilder`
+  panicked with "builder invalid after Set() invocation" although `Set()` was
+  never called; it now panics saying that the zero value is not usable and the
+  builder must be created with `NewSetBuilder` / `NewSortedSetBuilder`. A
+  zero-value `QueueBuilder` panicked the same misleading way; it is now an empty
+  builder that works (a nil `*Queue` already means an empty queue in this
+  package), and `Queue()` on one that was never used returns an empty queue, not
+  nil.
 - `BatchMapBuilder` compares keys with the `Hasher` on every path. The old code
   used Go equality (a Go map, or `==`) for buffers over 8 entries and when no
   hasher was set yet, which disagrees with a custom `Hasher` whose `Equal` is

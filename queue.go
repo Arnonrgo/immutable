@@ -182,9 +182,12 @@ func (itr *QueueIterator[T]) Next() (index int, value T, ok bool) {
 }
 
 // QueueBuilder supports batched enqueues. After calling Queue(), the builder
-// becomes invalid.
+// becomes invalid: every method, including a second Queue(), panics.
+//
+// The zero value is an empty builder that is ready to use.
 type QueueBuilder[T any] struct {
-	q *Queue[T]
+	q    *Queue[T] // nil is the empty queue, as everywhere else in this package
+	done bool      // Queue() has been called
 }
 
 // NewQueueBuilder returns a new builder with an empty queue.
@@ -194,13 +197,13 @@ func NewQueueBuilder[T any]() *QueueBuilder[T] {
 
 // Enqueue appends a single value to the end of the queue.
 func (b *QueueBuilder[T]) Enqueue(v T) {
-	assert(b.q != nil, "immutable.QueueBuilder: builder invalid after Queue() invocation")
+	assert(!b.done, "immutable.QueueBuilder: builder invalid after Queue() invocation")
 	b.q = b.q.Enqueue(v)
 }
 
 // EnqueueSlice appends all values in order.
 func (b *QueueBuilder[T]) EnqueueSlice(values []T) {
-	assert(b.q != nil, "immutable.QueueBuilder: builder invalid after Queue() invocation")
+	assert(!b.done, "immutable.QueueBuilder: builder invalid after Queue() invocation")
 	for i := range values {
 		b.q = b.q.Enqueue(values[i])
 	}
@@ -208,15 +211,18 @@ func (b *QueueBuilder[T]) EnqueueSlice(values []T) {
 
 // Len returns the current number of elements in the underlying queue.
 func (b *QueueBuilder[T]) Len() int {
-	assert(b.q != nil, "immutable.QueueBuilder: builder invalid after Queue() invocation")
+	assert(!b.done, "immutable.QueueBuilder: builder invalid after Queue() invocation")
 	return b.q.Len()
 }
 
 // Queue returns the built queue and invalidates the builder.
 func (b *QueueBuilder[T]) Queue() *Queue[T] {
-	assert(b.q != nil, "immutable.QueueBuilder.Queue(): duplicate call to fetch queue")
+	assert(!b.done, "immutable.QueueBuilder.Queue(): duplicate call to fetch queue")
 	q := b.q
-	b.q = nil
+	if q == nil { // zero-value builder that was never used
+		q = NewQueue[T]()
+	}
+	b.q, b.done = nil, true
 	return q
 }
 
