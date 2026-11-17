@@ -38,7 +38,7 @@ Forked from https://github.com/benbjohnson/immutable with the following enhancem
 **Memory Architecture Improvements:**
 - **Hybrid Data Structures**:
     - **List**: Uses a simple slice for small lists (< 32 elements) for up to 2x faster operations and ~85% less memory usage in common cases, transparently converting to a radix-32 vector trie for larger sizes.
-    - **Map**: Small-structure fast paths via builder initial flush and tiny array-node updates (≤ 8 keys); core Map remains HAMT.
+    - **Map**: Small-structure fast paths via tiny array-node updates (≤ 8 keys); core Map remains HAMT. `BatchMapBuilder` and its set variant build the whole trie in one pass.
 - **Pointer-Based Array Sharing (planned)**: Reduce allocations in `mapHashArrayNode.clone()` via pointer-backed children with copy-on-write
 - **Lazy Copy-on-Write**: Arrays shared via pointers until actual modification
 - **Cache-Friendly Design**: Improved memory layout for better CPU cache utilization
@@ -57,7 +57,7 @@ Immutable structures are snapshot-based: every mutation returns a new instance; 
 
 **Complete High-Performance Builder Suite:**
 - **`BatchListBuilder`**: list construction that fills the final trie leaves directly and joins them in `List()`; about 4-5x faster than `ListBuilder` at every size measured, and about 150x faster than a persistent `Append` loop at 100k elements (see [Performance Guidelines](#performance-guidelines))
-- **`BatchMapBuilder`**: buffered map construction; on par with `MapBuilder` at small batch sizes (see [Performance Guidelines](#performance-guidelines))
+- **`BatchMapBuilder`**: buffers the entries and builds the whole trie in one pass in `Map()`; 1.4-2.2x faster than `MapBuilder` from 9 entries up and level with it up to 8, with about 45% fewer allocations (see [Performance Guidelines](#performance-guidelines))
 - **`BatchSetBuilder`** & **`BatchSortedSetBuilder`**: Efficient bulk set construction
 - **`StreamingListBuilder`** & **`StreamingMapBuilder`**: Auto-flush with functional operations (filter, transform)
 - **`SortedBatchBuilder`**: Optimized sorted map construction with optional sort maintenance
@@ -456,11 +456,12 @@ The API is identical to the `Set` implementation.
 ## Advanced Batch Builders
 
 This library provides batch builders for buffered and streaming construction. They
-collect values in an internal buffer and flush them into the collection in batches.
-Compared with a loop of persistent operations they are much faster, but they do
-**not** consistently beat the plain `ListBuilder` / `MapBuilder`: the gain depends
-on the input size and the batch size. The measured numbers are in each section's
-Performance note and in [Performance Guidelines](#performance-guidelines).
+collect the values first and build the whole collection once, when you ask for
+it, instead of changing the collection on every call. Compared with a loop of
+persistent operations they are much faster, and `BatchListBuilder` and
+`BatchMapBuilder` are also faster than the plain `ListBuilder` / `MapBuilder`.
+The measured numbers are in each section's Performance note and in
+[Performance Guidelines](#performance-guidelines).
 
 ### Batch List Builder
 
@@ -506,11 +507,16 @@ less as noise; the effects above are 4x or larger.
 
 ### Batch Map Builder
 
-The `BatchMapBuilder` provides batched map construction with automatic flushing:
+The `BatchMapBuilder` buffers the entries and builds the whole map in `Map()`. It
+sorts the entries by the hash segments the trie uses, one level at a time, so each
+node is allocated once at its final size and no entry walks the trie from the
+root. The result is the map that calling `Set` for each entry in order would
+give: the last value for a key wins, and keys are compared with the `Hasher`.
 
 ```go
-// Create a batch map builder with batch size of 32
-builder := immutable.NewBatchMapBuilder[string, int](nil, 32)
+// The argument is a hint for how many entries you expect (0 selects a default).
+// It is never a limit; the builder grows as needed.
+builder := immutable.NewBatchMapBuilder[string, int](nil, 10000)
 
 // Add many entries efficiently
 for i := 0; i < 10000; i++ {
@@ -524,11 +530,39 @@ builder.SetMap(entries)
 m := builder.Map()
 ```
 
-**Performance** (Apple M1 Pro, random int keys, `-count=10`): on par with
-`MapBuilder` at batch sizes 16-128 (100,000 entries: 13.2 ms and 12.5 ms vs 12.9 ms,
-with the same number of allocations). It is faster only when the whole input fits
-in one batch (1,000 entries at batch 1024: 30 µs vs 68 µs) and slower with large
-batches on larger inputs (10,000 entries at batch 1024: 5.0 ms vs 0.9 ms).
+If `hasher` is nil, the default hasher is chosen from the first key you `Set`.
+After `Map()` every method except `Reset()` panics, as with `MapBuilder`.
+`Len()` counts `Set` calls, so it is an upper bound on the length of the map; a
+key that was set twice counts twice. `Flush()` is a deprecated no-op.
+
+**Performance** (Apple M1 Pro, `MapBuilder` and `BatchMapBuilder` built from the
+same keys, back to back, in the same process; the machine was heavily loaded, so
+the ratios are from an interleaved comparison of 200 rounds rather than from
+separate benchmark runs; see
+`memory-bank/reports/bench-phase2-2-batchmap-ab-2026-11-17.txt`):
+
+| Entries | random int keys | sequential int keys |
+|---|---|---|
+| 4 | same | same |
+| 8 | same | same |
+| 9-16 | 1.5x faster | 2.2x faster |
+| 100 | 1.5x faster | 1.7-1.9x faster |
+| 1,000 | 1.4x faster | 1.7x faster |
+| 10,000 | 1.4x faster | 1.4x faster |
+| 100,000 | 2.1x faster | 1.4x faster |
+
+Up to 8 entries a map is a single array node and the two builders do the same
+work, so there is no difference. Allocations drop by about 45% (100,000 random
+keys: 294,000 to 163,000). Bytes allocated go up by 10-50% (100,000 random keys: 8.1 to 11.4 MB),
+because the buffer and the sort scratch space exist next to the finished map for
+the duration of the build. The numbers do not depend on the size argument.
+Before this release a single large batch produced one oversized array node, so
+`Get` on such a map was a linear scan; the map is now a normal trie at any size.
+
+One difference from building with `Set`: entries whose keys share a full 32-bit
+hash are kept in a collision node in first-set order, which can differ from the
+order a `Set`-built map has after its root array node was expanded. Lookups and
+iteration results do not depend on it.
 
 ### Streaming Builders
 
@@ -607,13 +641,13 @@ sm := builder.SortedMap() // Efficiently constructed sorted map
 **Choosing a builder (measured, see the notes above):**
 - If you do not need buffering or streaming, `ListBuilder` and `MapBuilder` are the safe default: they are never far from the best option.
 - `BatchListBuilder` is faster than `ListBuilder` at every size measured (1k, 10k and 100k elements), by about 4-5x. Use it whenever you only append. If you already hold the values in a slice, `NewList(values...)` is faster again. Use `ListBuilder` when you need to `Set`, `Prepend`, `Slice` or `Get` while building.
-- `BatchMapBuilder` matches `MapBuilder` at batch sizes 16-128 and is not a speed-up. Its value is the buffered, last-write-wins API and `Reset()` for reuse.
-- Set builders inherit the map builders' behavior.
+- `BatchMapBuilder` is 1.4-2.2x faster than `MapBuilder` from 9 entries up, level with it up to 8, and allocates about 45% fewer objects but 10-50% more bytes (the buffered entries and the sort scratch space). Use it whenever you only add entries; use `MapBuilder` when you need `Get` or `Delete` while building.
+- `BatchSetBuilder` builds on `BatchMapBuilder` and behaves the same.
 - Streaming builders add auto-flush and functional operations (`Filter`, `Transform`); they are a convenience, not a speed-up.
 
 **Batch size:**
 - `BatchListBuilder`: the size argument is only a sizing hint and does not change the speed.
-- `BatchMapBuilder`: batch sizes of 16-128 behave the same; avoid very large batches for large inputs.
+- `BatchMapBuilder`: the size argument is only a sizing hint and does not change the speed.
 
 These are measurements of the current implementation, not guarantees. The
 numbers will be refreshed as the batch builders are reworked.
@@ -636,7 +670,7 @@ Please submit issues relating to bugs & documentation improvements.
 - zero dependencies
 - Small-structure fast paths:
   - List: `NewList(values...)` and `BatchListBuilder` build the trie bottom-up in one pass (the 2025-09 batch flush that extended a slice in place was replaced because it copied the whole list on every flush)
-  - Map: Empty-map batch flush builds an array node in one shot (last-write-wins); tiny array-node updates applied in-place when under threshold
+  - Map: `BatchMapBuilder` builds the whole trie in one pass in `Map()` (last-write-wins, `Hasher` equality); tiny array-node updates applied in-place when under threshold
 - New builder APIs:
   - `(*BatchListBuilder).Reset()` and `(*BatchMapBuilder).Reset()` for builder reuse without reallocations
 - Concurrency:
@@ -693,7 +727,7 @@ lb.Reset() // discards the values and makes the builder valid again
 
 // Reuse map builder and retain hasher
 mb := immutable.NewBatchMapBuilder[string,int](nil, 64)
-// ... set/flush ...
+// ... set ...
 mb.Reset() // clears state, preserves hasher & buffer capacity
 ```
 

@@ -445,7 +445,7 @@ func TestBatchSortedSetBuilder(t *testing.T) {
 // TestBatchMapBuilder_LastWriteWins verifies that duplicate keys in a buffer
 // resolve to the last value written, regardless of buffer size or map state.
 func TestBatchMapBuilder_LastWriteWins(t *testing.T) {
-	t.Run("SmallBuffer_EmptyMap", func(t *testing.T) {
+	t.Run("SmallBuffer", func(t *testing.T) {
 		builder := NewBatchMapBuilder[int, string](nil, 64)
 		builder.Set(1, "first")
 		builder.Set(2, "two")
@@ -456,7 +456,7 @@ func TestBatchMapBuilder_LastWriteWins(t *testing.T) {
 		}
 	})
 
-	t.Run("LargeBuffer_EmptyMap", func(t *testing.T) {
+	t.Run("LargeBuffer", func(t *testing.T) {
 		builder := NewBatchMapBuilder[int, string](nil, 64)
 		for i := 0; i < 12; i++ {
 			builder.Set(i, "first")
@@ -471,7 +471,7 @@ func TestBatchMapBuilder_LastWriteWins(t *testing.T) {
 		}
 	})
 
-	t.Run("SmallBuffer_NonEmptyArrayNode", func(t *testing.T) {
+	t.Run("SmallBuffer_AcrossFlush", func(t *testing.T) {
 		builder := NewBatchMapBuilder[int, string](nil, 64)
 		builder.Set(1, "existing")
 		builder.Flush()
@@ -488,7 +488,7 @@ func TestBatchMapBuilder_LastWriteWins(t *testing.T) {
 		}
 	})
 
-	t.Run("LargeBuffer_NonEmptyArrayNode", func(t *testing.T) {
+	t.Run("LargeBuffer_AcrossFlush", func(t *testing.T) {
 		builder := NewBatchMapBuilder[int, string](nil, 64)
 		builder.Set(1, "existing")
 		builder.Flush()
@@ -549,14 +549,10 @@ func TestBatchBuilderEdgeCases(t *testing.T) {
 		builder.Set(1, "one")
 
 		m1 := builder.Map()
-		m2 := builder.Map() // Should return nil after first call
-
 		if m1.Len() != 1 {
 			t.Errorf("Expected first map length 1, got %d", m1.Len())
 		}
-		if m2 != nil {
-			t.Error("Expected second map to be nil after builder invalidation")
-		}
+		mustPanic(t, "second Map()", func() { builder.Map() })
 	})
 }
 

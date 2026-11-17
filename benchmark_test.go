@@ -670,39 +670,6 @@ func BenchmarkSmallMap_BatchBuilder(b *testing.B) {
 			})
 		}
 	})
-
-	b.Run("UpdateWithinThreshold", func(b *testing.B) {
-		for _, size := range sizes {
-			if size < 2 {
-				continue
-			}
-			b.Run(fmt.Sprintf("N%d", size), func(b *testing.B) {
-				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
-					// Start with size/2 existing entries
-					builder := NewBatchMapBuilder[int, int](nil, size)
-					for j := 0; j < size/2; j++ {
-						builder.Set(j, j)
-					}
-					m := builder.Map()
-
-					// Now flush remaining entries (updates + new) within threshold
-					builder2 := NewBatchMapBuilder[int, int](nil, size)
-					// attach existing map into builder2 by direct field move
-					builder2.m = m
-					// updates for first half
-					for j := 0; j < size/2; j++ {
-						builder2.Set(j, j*10)
-					}
-					// new keys
-					for j := size / 2; j < size; j++ {
-						builder2.Set(j, j*10)
-					}
-					_ = builder2.Map()
-				}
-			})
-		}
-	})
 }
 
 func BenchmarkSortedBatchBuilder(b *testing.B) {
