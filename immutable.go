@@ -1724,10 +1724,18 @@ func (h *reflectHasher[K]) Equal(a, b K) bool {
 // historical behavior). The HAMT consumes the hash 5 bits at a time starting
 // from the low end, so identity hashing spreads dense sequential keys (0, 1,
 // 2, …) evenly, but keys that share their low bits (multiples of 32, 1024, …)
-// all land in the same slot at each level, producing deeper trees and more
-// allocations. Applying the finalizer unconditionally would improve
-// distribution but would change hash values, and with them the iteration
-// order that users may rely on.
+// all land in the same slot at each level, producing deeper trees (one or two
+// more levels at 100,000 keys).
+//
+// Mixing these values too was measured and rejected
+// (memory-bank/reports/bench-phase5-3-int-hash-2026-11-17.txt): dense keys,
+// which are the common case (indexes, ids, timestamps), fill every slot of a
+// node under identity, so 1,000 consecutive keys take 33 nodes and two levels
+// where a mixed hash takes about 310 nodes and 2.65 levels, and building a map
+// in key order is 1.5-1.9x slower with a mixed hash. A mixed hash helps only
+// keys that share low bits, and it would change the iteration order users may
+// rely on. TestDefaultIntHashKeepsDenseKeysCompact pins this.
+//
 // For larger values, apply a SplitMix64-style finalizer and fold to 32 bits.
 func hashUint64(value uint64) uint32 {
 	if value <= 0xffffffff {
