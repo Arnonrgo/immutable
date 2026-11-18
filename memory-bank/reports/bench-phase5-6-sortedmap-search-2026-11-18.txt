@@ -1,0 +1,21 @@
+Phase 5.6: SortedMap node search
+================================
+toolchain: go1.27.4 darwin/arm64 (Apple M1 Pro), heavily loaded machine; minimum ns/op
+of 5-6 interleaved rounds of 100 ms. Old = d78e9d7. B/op and allocs/op identical on every row.
+
+Attempt 1, slices.BinarySearchFunc with a closure: Get 0.84-0.88x (slower) -> rejected.
+Final, a direct loop that ends on an exact match and returns the found flag:
+
+  benchmark                      old ns   new ns   old/new
+  Baseline_SortedMap_Get/N1000     81.4     76.1    1.07x
+  Baseline_SortedMap_Get/N10000   112.8    106.5    1.06x
+  Baseline_SortedMap_Get/N100000  157.0    149.4    1.05x
+  SortedMap_Get/size-100           35.7     29.3    1.22x
+  SortedMap_Get/size-1000          69.8     66.1    1.06x
+  SortedMap_Get/size-10000         79.5     76.0    1.05x
+  SortedMap_Get/size-100000        90.7     86.9    1.04x
+  SortedMap_RandomSet/Delete      level (1.00-1.03x)
+  SortedMapBuilder_Set            121.3 -> 121.3
+
+Correctness: the old search compared Compare() with 1 and -1; a comparer returning a-b
+made Get miss present keys (test fails on the old code: Get(0) = 0, false).

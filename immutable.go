@@ -47,7 +47,6 @@ import (
 	"fmt"
 	"math/bits"
 	"reflect"
-	"sort"
 	"strings"
 )
 
@@ -1192,8 +1191,22 @@ func (n *sortedMapBranchNode[K, V]) minKey() K {
 
 // indexOf returns the index of the key within the child nodes.
 func (n *sortedMapBranchNode[K, V]) indexOf(key K, c Comparer[K]) int {
-	if idx := sort.Search(len(n.elems), func(i int) bool { return c.Compare(n.elems[i].key, key) == 1 }); idx > 0 {
-		return idx - 1
+	// Find the last child whose minimum key is not greater than key (the first
+	// child if there is none). Keys are unique, so an exact match ends the search.
+	lo, hi := 0, len(n.elems)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		r := c.Compare(n.elems[mid].key, key)
+		if r == 0 {
+			return mid
+		} else if r < 0 {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	if lo > 0 {
+		return lo - 1
 	}
 	return 0
 }
@@ -1332,17 +1345,34 @@ func (n *sortedMapLeafNode[K, V]) minKey() K {
 
 // indexOf returns the index of the given key.
 func (n *sortedMapLeafNode[K, V]) indexOf(key K, c Comparer[K]) int {
-	return sort.Search(len(n.entries), func(i int) bool {
-		return c.Compare(n.entries[i].key, key) != -1 // GTE
-	})
+	idx, _ := n.find(key, c)
+	return idx
+}
+
+// find returns the index of the first entry whose key is not less than key,
+// and whether that entry's key equals key.
+func (n *sortedMapLeafNode[K, V]) find(key K, c Comparer[K]) (int, bool) {
+	lo, hi := 0, len(n.entries)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		r := c.Compare(n.entries[mid].key, key)
+		if r == 0 {
+			return mid, true
+		} else if r < 0 {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo, false
 }
 
 // get returns the value of the given key.
 func (n *sortedMapLeafNode[K, V]) get(key K, c Comparer[K]) (value V, ok bool) {
-	idx := n.indexOf(key, c)
+	idx, found := n.find(key, c)
 
-	// If the index is beyond the entry count or the key is not equal then return 'not found'.
-	if idx == len(n.entries) || c.Compare(n.entries[idx].key, key) != 0 {
+	// If the key is not found then return 'not found'.
+	if !found {
 		return value, false
 	}
 
@@ -1354,8 +1384,7 @@ func (n *sortedMapLeafNode[K, V]) get(key K, c Comparer[K]) (value V, ok bool) {
 // causes the node to grow beyond the maximum size then it is split in two.
 func (n *sortedMapLeafNode[K, V]) set(key K, value V, c Comparer[K], mutable bool, resized *bool) (sortedMapNode[K, V], sortedMapNode[K, V]) {
 	// Find the insertion index for the key.
-	idx := n.indexOf(key, c)
-	exists := idx < len(n.entries) && c.Compare(n.entries[idx].key, key) == 0
+	idx, exists := n.find(key, c)
 
 	// Update in-place, if mutable.
 	if mutable {
@@ -1406,10 +1435,10 @@ func (n *sortedMapLeafNode[K, V]) set(key K, value V, c Comparer[K], mutable boo
 // delete returns a copy of node with key removed. Returns the original node if
 // the key does not exist. Returns nil if the removed key is the last remaining key.
 func (n *sortedMapLeafNode[K, V]) delete(key K, c Comparer[K], mutable bool, resized *bool) sortedMapNode[K, V] {
-	idx := n.indexOf(key, c)
+	idx, found := n.find(key, c)
 
 	// Return original node if key is not found.
-	if idx >= len(n.entries) || c.Compare(n.entries[idx].key, key) != 0 {
+	if !found {
 		return n
 	}
 	*resized = true

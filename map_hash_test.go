@@ -208,3 +208,57 @@ func TestDefaultHasherEqualComparesContents(t *testing.T) {
 		t.Fatalf("Get(ac) = %d, %v", v, ok)
 	}
 }
+
+// diffComparer returns the difference of its arguments, so results other than
+// -1, 0 and 1 are common. Comparer documents -1, 0 and 1, but a caller that
+// returns any negative or positive number must not corrupt the tree.
+type diffComparer struct{}
+
+func (diffComparer) Compare(a, b int) int { return a - b }
+
+func TestSortedMapToleratesComparerResultsBeyondOne(t *testing.T) {
+	const n = 2000
+	m := NewSortedMap[int, int](diffComparer{})
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	rng := splitmix(7)
+	for i := n - 1; i > 0; i-- {
+		j := rng.intn(i + 1)
+		order[i], order[j] = order[j], order[i]
+	}
+	for _, k := range order {
+		m = m.Set(k*3, k)
+	}
+	if m.Len() != n {
+		t.Fatalf("Len = %d, want %d", m.Len(), n)
+	}
+	for k := 0; k < n; k++ {
+		if v, ok := m.Get(k * 3); !ok || v != k {
+			t.Fatalf("Get(%d) = %d, %v", k*3, v, ok)
+		}
+		if _, ok := m.Get(k*3 + 1); ok {
+			t.Fatalf("Get(%d) found a key that was never set", k*3+1)
+		}
+	}
+	prev := -1
+	for itr := m.Iterator(); !itr.Done(); {
+		k, _, _ := itr.Next()
+		if k <= prev {
+			t.Fatalf("keys out of order: %d after %d", k, prev)
+		}
+		prev = k
+	}
+	for k := 0; k < n; k += 2 {
+		m = m.Delete(k * 3)
+	}
+	if m.Len() != n/2 {
+		t.Fatalf("Len after deletes = %d, want %d", m.Len(), n/2)
+	}
+	for k := 0; k < n; k++ {
+		if _, ok := m.Get(k * 3); ok != (k%2 == 1) {
+			t.Fatalf("Get(%d) found = %v after deleting even k", k*3, ok)
+		}
+	}
+}

@@ -216,6 +216,10 @@ Changes since v0.6.0.
   uses the same function. The default hasher is still deterministic and not
   resistant to hash flooding; use a custom seeded `Hasher` for keys an attacker
   controls.
+- **`SortedMap` accepts any `Comparer` that returns a negative, zero or positive
+  number.** Lookups compared the result with `1` and `-1`, so a comparer that
+  returned `a - b` made `Get` miss keys that were present. `Get` is also 4-22%
+  faster (a direct binary search, one `Compare` call fewer per lookup).
 - **`Map.Set` and `Map.Delete` allocate one object less.** The internal node
   methods return whether a key was added or removed instead of writing through a
   pointer that escaped to the heap. Time is unchanged within measurement noise.
