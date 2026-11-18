@@ -778,9 +778,9 @@ go tool pprof -top -sample_index=alloc_space mem.prof
 Optional: Enable PGO locally
 ```bash
 # Generate a profile and write default.pgo
-go test -bench=. -run="^$" -cpuprofile=cpu.prof -count=1
-go tool pprof -proto cpu.prof > cpu.pb.gz
-go tool pgo -compile=local -o default.pgo cpu.pb.gz
+go test -bench=Baseline -run="^$" -cpuprofile=default.pgo -count=1 -pgo=off
+# Only builds of this package (its tests and benchmarks) use it; it does not
+# affect programs that import the library. Measured gain on the final code: none to a few percent, mixed.
 
 # Use the profile for builds/tests (Go 1.21+)
 go test -bench=. -benchmem -count=3 -pgo=auto ./...
