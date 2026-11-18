@@ -20,7 +20,7 @@ Implement a hybrid data structure for the `List`, similar to the existing `Map` 
 
 ### Positive
 - **Dramatic Performance Improvement:** Up to **2x faster** for common immutable operations (`Append`, `Prepend`) on small lists.
-- **~85% Memory Reduction:** Drastically reduces allocation overhead for small lists, lessening GC pressure.
+- **~85% Memory Reduction** (2024 figure for the slice node, not re-measurable since ADR-005 removed it; today `List.Append` onto 32 values costs 360 B, was 2,080 B before the tail buffer, see ADR-005 and the README): Drastically reduces allocation overhead for small lists, lessening GC pressure.
 - **Best of Both Worlds:** Achieves performance close to native slices for the common case (small lists) while retaining `O(log n)` scalability for large lists.
 - **API Unchanged:** This is a purely internal implementation detail. The public API of the `List` remains 100% backward compatible.
 - **Pattern Consistency:** Aligns the `List` implementation strategy with the already-proven successful strategy of the `Map`.

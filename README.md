@@ -696,32 +696,34 @@ Please submit issues relating to bugs & documentation improvements.
 
 ### Current Performance Snapshot
 
-Reference machine: Apple M1 Pro, go1.27.4, `-count=10 -benchtime=200ms`. Full data:
-`memory-bank/reports/bench-baseline-2026-11-17.txt`; rerun with `scripts/bench.sh run`.
-The run was taken on a busy machine (noise about ±2-19%), so treat differences
-under about 20% as noise.
+Reference machine: Apple M1 Pro, go1.27.4, `-count=10 -benchtime=200ms`, medians. Full data:
+`memory-bank/reports/bench-final-2026-11-18.txt` (commit 38bbde3, machine load about 10);
+rerun with `scripts/bench.sh run`. The earlier baseline run
+(`bench-baseline-2026-11-17.txt`, commit 576067d) was taken at load 50-85, so speed
+ratios against it are inflated; bytes and allocation counts do not depend on load.
+Treat time differences under about 20% as noise.
 
 Building 100,000 elements (ns per element; `rand` = random int keys, `seq` = 0..N-1):
 
 | Operation | ns/elem | B/elem (rand) | allocs/elem (rand) |
 |---|---|---|---|
-| Go map, `m[k] = v` | 38 | 47 | 0.005 |
-| `MapBuilder.Set` (seq / rand) | 68 / 129 | 81 | 2.9 |
-| `Map.Set` loop (seq / rand) | 603 / 849 | 1710 | 8.0 |
-| `ListBuilder.Append` | 27 | 9.7 | 0.03 |
-| `List.Append` loop | 754 | 2440 | 5.7 |
-| `NewList(values...)` | 25 | 9.6 | 0.03 |
+| Go map, `m[k] = v` | 37 | 47 | 0.005 |
+| `MapBuilder.Set` (seq / rand) | 61 / 112 | 80 | 1.9 |
+| `Map.Set` loop (seq / rand) | 546 / 793 | 1709 | 7.0 |
+| `ListBuilder.Append` | 6.4 | 9.6 | 0.03 |
+| `List.Append` loop | 85 | 256 | 2.1 |
+| `NewList(values...)` | 2.3 | 10.2 | 0.03 |
 
 Single operations on a 100,000-element collection:
 
 | Operation | Time | Allocations |
 |---|---|---|
-| `Map.Get` (seq / rand) | 22 ns / 50 ns | 0 |
-| `Map.Set` of a new key (rand) | 884 ns | 1.85 KiB, 8 allocs |
-| `Map.Delete` of an existing key (rand) | 895 ns | 1.81 KiB, 7 allocs |
-| `List.Get` | 8.9 ns | 0 |
-| `List.Set` | 714 ns | 2.5 KiB, 6 allocs |
-| `SortedMap.Get` (rand) | 203 ns | 0 |
+| `Map.Get` (seq / rand) | 17 ns / 37 ns | 0 |
+| `Map.Set` of a new key (rand) | 841 ns | 1.85 KiB, 7 allocs |
+| `Map.Delete` of an existing key (rand) | 849 ns | 1.81 KiB, 6 allocs |
+| `List.Get` | 6.6 ns | 0 |
+| `List.Set` | 494 ns | 2.0 KiB, 4 allocs |
+| `SortedMap.Get` (rand) | 172 ns | 0 |
 
 Not covered by the numbers above (measured earlier, not re-run for the baseline):
 the concurrency figures below.

@@ -229,7 +229,8 @@ Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
 ## Phase 6: Housekeeping
 
 - [ ] 6.1 Regenerate `default.pgo` after Phases 2-5 (README documents the procedure), and re-run the baseline.
-- [ ] 6.2 Update the README benchmark tables and ADR claims (ADR-001 "53%", ADR-004 "~85%") from the final numbers.
+- [x] 6.2 Update the README benchmark tables and ADR claims (ADR-001 "53%", ADR-004 "~85%") from the final numbers.
+  - Status 2026-11-18: README tables now come from `memory-bank/reports/bench-final-2026-11-18.txt` (commit 38bbde3, load about 10). Caveat recorded in the README: the Phase 0 baseline ran at load 50-85, so its speed ratios are inflated; bytes and allocations are exact. The two ADR figures predate the current code and cannot be re-measured, so they now carry a note instead of a new number.
   - 2026-11-17: the README "up to 2x faster, ~85% less memory" small-list claim was replaced in 4.2 by a description of the tail and the measured Append figure; there is no pre-ADR-004 baseline to re-measure it against. ADR-004 still carries the "~85%" figure and the ADR-001 "53%" claim is untouched.
 - [x] 6.3 Obsolete: `listSliceNode`, `toTrie` and `listSliceThreshold` were removed in 4.2, so there is no slice node to tolerate or size to check.
 - [ ] 6.4 Repository hygiene (found 2026-11-17 during Phase 1): the compiled test binary `immutable.test` is tracked in git (added in `ce1f089`) and should be removed with `git rm` and ignored (`*.test` in `.gitignore`). The root also holds `baseline_phase4a.txt`, `bench_list_builders_after.txt`, `bench_map_builders_after.txt`, `bench_small_map_after.txt` and `baseline_performance.md`, all older single-shot results that the Phase 0 baseline supersedes: move them under `memory-bank/reports/archive/` or delete them. Needs owner approval (it deletes tracked files).
