@@ -213,7 +213,10 @@ Baseline problem: about 2.4 KB and 5.7 allocs per persistent `Append` at 100k.
   - `hash/maphash` as an opt-in `Hasher`, not the default: speed is good, but `MakeSeed()` is random and a seed can't be recreated in another process, so a maphash default would make map iteration order differ on every run, which breaks the README's deterministic-iteration promise. As an opt-in constructor it gives hash-flooding resistance. A `K comparable` constructor could use `maphash.Comparable` and also cover struct keys that the default hasher rejects. Decide in open question 2.
   - `rapidhash.HashComparable` uses `reflect` (about 33 ns per call) and is not suitable for a hot path. xxh3 and `cespare/xxhash` are not benchmarked.
   - Default hashes stay deterministic. Iteration order will change after upgrade (see open question 2), so add a CHANGELOG note.
-- [ ] 5.4 Typed fast paths in `defaultHasher`, so `any(key).(type)` is not evaluated on each call (per-K specialization at construction time).
+- [x] 5.4 Typed fast paths in `defaultHasher`, so `any(key).(type)` is not evaluated on each call (per-K specialization at construction time).
+  - Status 2026-11-17: done. `NewHasher` returns `integerHasher[K]` (11 integer types) or `stringHasher`, chosen once from the key type; `defaultHasher` is gone. Equal is `a == b` (it boxed both keys before). Hash values are unchanged, so iteration order is too.
+  - Measured (`memory-bank/reports/bench-phase5-4-hasher-specialization-2026-11-17.txt`): `Get` 1.02-1.30x faster at 1,000 to 100,000 entries, small-map `GetHit` 1.09-1.66x, misses 1.00-1.16x; `Set`/`Delete` level; B/op and allocs identical.
+  - Tests: `TestNewHasherIsChosenPerKeyType`, `TestIntegerHasherHashesLikeHashUint64`, `TestDefaultHashersDoNotAllocate`; the `TestInternal_mapNode_*` tests that built `defaultHasher[int]` use `NewHasher(0)`.
 - [ ] 5.5 Evaluate allocation per entry (inline single entries in bitmap-node slots). Do this only if 5.1-5.4 leave a measurable gap. It needs its own design note.
 - [ ] 5.6 `SortedMap`: use `slices.BinarySearchFunc`, and compare the Comparer result with `> 0` or `< 0` rather than `== 1`.
 

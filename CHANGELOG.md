@@ -216,6 +216,13 @@ Changes since v0.6.0.
   uses the same function. The default hasher is still deterministic and not
   resistant to hash flooding; use a custom seeded `Hasher` for keys an attacker
   controls.
+- **`NewHasher` picks the hasher for the key type once.** The built-in hasher no
+  longer switches on the type of the key on every `Hash` call, and `Equal`
+  compares the keys directly instead of boxing both in an interface. `Get` on a
+  map with `int` or `string` keys is 1.02-1.30x faster (1.09-1.66x on maps of up
+  to 16 entries), a miss 1.00-1.16x faster; `Set` and `Delete` are level, and bytes
+  and allocations are unchanged. Hash values and iteration order are unchanged.
+  The unexported `defaultHasher` is replaced by `integerHasher` and `stringHasher`.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`
   loop makes) turns the list around once and keeps the result, so reading the

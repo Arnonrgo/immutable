@@ -1655,11 +1655,43 @@ type Hasher[K any] interface {
 }
 
 // NewHasher returns the built-in hasher for a given key type.
+//
+// The hasher is chosen once, here, from the type of key, so Hash and Equal do not
+// switch on the type of the key on every call (they used to, which also boxed
+// both keys in an interface to compare them).
 func NewHasher[K any](key K) Hasher[K] {
 	// Attempt to use non-reflection based hasher first.
-	switch (any(key)).(type) {
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, string:
-		return &defaultHasher[K]{}
+	var h any
+	switch any(key).(type) {
+	case int:
+		h = integerHasher[int]{}
+	case int8:
+		h = integerHasher[int8]{}
+	case int16:
+		h = integerHasher[int16]{}
+	case int32:
+		h = integerHasher[int32]{}
+	case int64:
+		h = integerHasher[int64]{}
+	case uint:
+		h = integerHasher[uint]{}
+	case uint8:
+		h = integerHasher[uint8]{}
+	case uint16:
+		h = integerHasher[uint16]{}
+	case uint32:
+		h = integerHasher[uint32]{}
+	case uint64:
+		h = integerHasher[uint64]{}
+	case uintptr:
+		h = integerHasher[uintptr]{}
+	case string:
+		h = stringHasher{}
+	}
+	if h != nil {
+		// Every case above is a hasher of exactly the type of key, so this
+		// assertion cannot fail.
+		return h.(Hasher[K])
 	}
 
 	// Fallback to reflection-based hasher otherwise.
@@ -1746,45 +1778,29 @@ func hashUint64(value uint64) uint32 {
 	return uint32(x ^ (x >> 32))
 }
 
-// defaultHasher implements Hasher.
-type defaultHasher[K any] struct{}
+// integer is the built-in integer types the default hasher supports.
+type integer interface {
+	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | uintptr
+}
+
+// integerHasher is the default Hasher for the built-in integer types. A signed
+// key is sign-extended to 64 bits before it is hashed, as hashUint64 expects.
+type integerHasher[K integer] struct{}
 
 // Hash returns a hash for key.
-func (h *defaultHasher[K]) Hash(key K) uint32 {
-	switch x := (any(key)).(type) {
-	case int:
-		return hashUint64(uint64(x))
-	case int8:
-		return hashUint64(uint64(x))
-	case int16:
-		return hashUint64(uint64(x))
-	case int32:
-		return hashUint64(uint64(x))
-	case int64:
-		return hashUint64(uint64(x))
-	case uint:
-		return hashUint64(uint64(x))
-	case uint8:
-		return hashUint64(uint64(x))
-	case uint16:
-		return hashUint64(uint64(x))
-	case uint32:
-		return hashUint64(uint64(x))
-	case uint64:
-		return hashUint64(uint64(x))
-	case uintptr:
-		return hashUint64(uint64(x))
-	case string:
-		return hashString(x)
-	}
-	panic(fmt.Sprintf("immutable.defaultHasher.Hash: must set hasher for %T type", key))
-}
+func (integerHasher[K]) Hash(key K) uint32 { return hashUint64(uint64(key)) }
 
 // Equal returns true if a is equal to b. Otherwise returns false.
-// Panics if a and b are not comparable.
-func (h *defaultHasher[K]) Equal(a, b K) bool {
-	return any(a) == any(b)
-}
+func (integerHasher[K]) Equal(a, b K) bool { return a == b }
+
+// stringHasher is the default Hasher for string keys.
+type stringHasher struct{}
+
+// Hash returns a hash for key.
+func (stringHasher) Hash(key string) uint32 { return hashString(key) }
+
+// Equal returns true if a is equal to b. Otherwise returns false.
+func (stringHasher) Equal(a, b string) bool { return a == b }
 
 // Comparer allows the comparison of two keys for the purpose of sorting.
 type Comparer[K any] interface {

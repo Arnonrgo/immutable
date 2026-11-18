@@ -81,3 +81,130 @@ func TestDefaultIntHashKeepsDenseKeysCompact(t *testing.T) {
 		}
 	})
 }
+
+// TestNewHasherIsChosenPerKeyType pins 5.4: NewHasher picks a hasher for the
+// exact key type once, so Hash and Equal do not switch on the type of the key on
+// every call. A named type still gets the reflection-based hasher.
+func TestNewHasherIsChosenPerKeyType(t *testing.T) {
+	check := func(name string, ok bool) {
+		t.Helper()
+		if !ok {
+			t.Errorf("NewHasher(%s) did not return the specialized hasher", name)
+		}
+	}
+	_, ok := NewHasher(int(0)).(integerHasher[int])
+	check("int", ok)
+	_, ok = NewHasher(int8(0)).(integerHasher[int8])
+	check("int8", ok)
+	_, ok = NewHasher(int16(0)).(integerHasher[int16])
+	check("int16", ok)
+	_, ok = NewHasher(int32(0)).(integerHasher[int32])
+	check("int32", ok)
+	_, ok = NewHasher(int64(0)).(integerHasher[int64])
+	check("int64", ok)
+	_, ok = NewHasher(uint(0)).(integerHasher[uint])
+	check("uint", ok)
+	_, ok = NewHasher(uint8(0)).(integerHasher[uint8])
+	check("uint8", ok)
+	_, ok = NewHasher(uint16(0)).(integerHasher[uint16])
+	check("uint16", ok)
+	_, ok = NewHasher(uint32(0)).(integerHasher[uint32])
+	check("uint32", ok)
+	_, ok = NewHasher(uint64(0)).(integerHasher[uint64])
+	check("uint64", ok)
+	_, ok = NewHasher(uintptr(0)).(integerHasher[uintptr])
+	check("uintptr", ok)
+	_, ok = NewHasher("").(stringHasher)
+	check("string", ok)
+
+	type myInt int
+	type myString string
+	if _, ok := NewHasher(myInt(0)).(*reflectHasher[myInt]); !ok {
+		t.Error("NewHasher(myInt) should use the reflection-based hasher")
+	}
+	if _, ok := NewHasher(myString("")).(*reflectHasher[myString]); !ok {
+		t.Error("NewHasher(myString) should use the reflection-based hasher")
+	}
+}
+
+// checkIntegerHasher requires the hasher for K to hash a value as the 64-bit
+// number it sign-extends to (hashUint64), and to compare by value.
+func checkIntegerHasher[K integer](t *testing.T, vals ...K) {
+	t.Helper()
+	h := NewHasher(vals[0])
+	for _, v := range vals {
+		if got, want := h.Hash(v), hashUint64(uint64(v)); got != want {
+			t.Errorf("%T: Hash(%v) = %#x, want %#x", v, v, got, want)
+		}
+		if !h.Equal(v, v) {
+			t.Errorf("%T: Equal(%v, %v) = false", v, v, v)
+		}
+		for _, w := range vals {
+			if (v == w) != h.Equal(v, w) {
+				t.Errorf("%T: Equal(%v, %v) = %v", v, v, w, h.Equal(v, w))
+			}
+		}
+	}
+}
+
+func TestIntegerHasherHashesLikeHashUint64(t *testing.T) {
+	checkIntegerHasher(t, int(-1), 0, 1, 1<<31, 1<<40, -1<<40)
+	checkIntegerHasher(t, int8(-1), 0, 1, 127, -128)
+	checkIntegerHasher(t, int16(-1), 0, 1, 32767, -32768)
+	checkIntegerHasher(t, int32(-1), 0, 1, 1<<31-1, -1<<31)
+	checkIntegerHasher(t, int64(-1), 0, 1, 1<<62, -1<<63)
+	checkIntegerHasher(t, uint(0), 1, 1<<32, ^uint(0))
+	checkIntegerHasher(t, uint8(0), 1, 255)
+	checkIntegerHasher(t, uint16(0), 1, 65535)
+	checkIntegerHasher(t, uint32(0), 1, 1<<32-1)
+	checkIntegerHasher(t, uint64(0), 1, 1<<32, ^uint64(0))
+	checkIntegerHasher(t, uintptr(0), 1, ^uintptr(0))
+
+	// A negative key is sign-extended: int8(-1) and int64(-1) hash alike, and
+	// differently from uint8(255), which is the number 255.
+	if a, b := NewHasher(int8(0)).Hash(-1), NewHasher(int64(0)).Hash(-1); a != b {
+		t.Errorf("int8(-1) hashes to %#x but int64(-1) to %#x", a, b)
+	}
+	if a, b := NewHasher(int8(0)).Hash(-1), NewHasher(uint8(0)).Hash(255); a == b {
+		t.Errorf("int8(-1) and uint8(255) both hash to %#x", a)
+	}
+}
+
+// TestDefaultHashersDoNotAllocate: neither Hash nor Equal boxes its keys, even
+// for values that would not fit the small-integer cache of an interface.
+func TestDefaultHashersDoNotAllocate(t *testing.T) {
+	ih := NewHasher(0)
+	sh := NewHasher("")
+	big, s := 1<<40, "a key that is long enough to matter"
+	var sink uint32
+	var eq bool
+	for name, fn := range map[string]func(){
+		"int Hash":     func() { sink += ih.Hash(big) },
+		"int Equal":    func() { eq = ih.Equal(big, big+1) },
+		"string Hash":  func() { sink += sh.Hash(s) },
+		"string Equal": func() { eq = sh.Equal(s, s[:len(s)-1]) },
+	} {
+		if n := testing.AllocsPerRun(100, fn); n != 0 {
+			t.Errorf("%s allocates %v times, want 0", name, n)
+		}
+	}
+	_, _ = sink, eq
+}
+
+func TestDefaultHasherEqualComparesContents(t *testing.T) {
+	s := NewHasher("")
+	if s.Equal("ab", "ac") || s.Equal("a", "") || !s.Equal("ab", "ab") {
+		t.Fatal("string Equal must compare the whole content")
+	}
+	i := NewHasher(0)
+	if i.Equal(1, 2) || i.Equal(2, 1) || !i.Equal(3, 3) {
+		t.Fatal("int Equal must be ==")
+	}
+	m := NewMap[string, int](nil).Set("ab", 1).Set("ac", 2)
+	if v, ok := m.Get("ab"); !ok || v != 1 {
+		t.Fatalf("Get(ab) = %d, %v", v, ok)
+	}
+	if v, ok := m.Get("ac"); !ok || v != 2 {
+		t.Fatalf("Get(ac) = %d, %v", v, ok)
+	}
+}

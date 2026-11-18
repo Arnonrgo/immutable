@@ -840,11 +840,11 @@ func ExampleListBuilder_Slice() {
 // Ensure node can support overwrites as it expands.
 func TestInternal_mapNode_Overwrite(t *testing.T) {
 	const n = 1000
-	var h defaultHasher[int]
+	h := NewHasher(0)
 	var node mapNode[int, int] = &mapArrayNode[int, int]{}
 	for i := 0; i < n; i++ {
 		var resized bool
-		node = node.set(i, i, 0, h.Hash(i), &h, false, &resized)
+		node = node.set(i, i, 0, h.Hash(i), h, false, &resized)
 		if !resized {
 			t.Fatal("expected resize")
 		}
@@ -852,21 +852,21 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 		// Overwrite every node.
 		for j := 0; j <= i; j++ {
 			var resized bool
-			node = node.set(j, i*j, 0, h.Hash(j), &h, false, &resized)
+			node = node.set(j, i*j, 0, h.Hash(j), h, false, &resized)
 			if resized {
 				t.Fatalf("expected no resize: i=%d, j=%d", i, j)
 			}
 		}
 
 		// Verify not found at each branch type.
-		if _, ok := node.get(1000000, 0, h.Hash(1000000), &h); ok {
+		if _, ok := node.get(1000000, 0, h.Hash(1000000), h); ok {
 			t.Fatal("expected no value")
 		}
 	}
 
 	// Verify all key/value pairs in map.
 	for i := 0; i < n; i++ {
-		if v, ok := node.get(i, 0, h.Hash(i), &h); !ok || v != i*(n-1) {
+		if v, ok := node.get(i, 0, h.Hash(i), h); !ok || v != i*(n-1) {
 			t.Fatalf("get(%d)=<%v,%v>", i, v, ok)
 		}
 	}
@@ -875,17 +875,17 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 func TestInternal_mapArrayNode(t *testing.T) {
 	// Ensure 8 or fewer elements stays in an array node.
 	t.Run("Append", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized).(*mapArrayNode[int, int])
+			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized).(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := 0; j < i; j++ {
-				if v, ok := n.get(j*10, 0, h.Hash(j*10), &h); !ok || v != j {
+				if v, ok := n.get(j*10, 0, h.Hash(j*10), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -894,17 +894,17 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure 8 or fewer elements stays in an array node when inserted in reverse.
 	t.Run("Prepend", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := &mapArrayNode[int, int]{}
 		for i := 7; i >= 0; i-- {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized).(*mapArrayNode[int, int])
+			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized).(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := i; j <= 7; j++ {
-				if v, ok := n.get(j*10, 0, h.Hash(j*10), &h); !ok || v != j {
+				if v, ok := n.get(j*10, 0, h.Hash(j*10), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -913,17 +913,17 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure array can transition between node types.
 	t.Run("Expand", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 100; i++ {
 			var resized bool
-			n = n.set(i, i, 0, h.Hash(i), &h, false, &resized)
+			n = n.set(i, i, 0, h.Hash(i), h, false, &resized)
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := 0; j < i; j++ {
-				if v, ok := n.get(j, 0, h.Hash(j), &h); !ok || v != j {
+				if v, ok := n.get(j, 0, h.Hash(j), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -932,16 +932,16 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure deleting elements returns the correct new node.
 	RunRandom(t, "Delete", func(t *testing.T, rand *rand.Rand) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized)
+			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized)
 		}
 
 		for _, i := range rand.Perm(8) {
 			var resized bool
-			n = n.delete(i*10, 0, h.Hash(i*10), &h, false, &resized)
+			n = n.delete(i*10, 0, h.Hash(i*10), h, false, &resized)
 		}
 		if n != nil {
 			t.Fatal("expected nil rand")
@@ -951,9 +951,9 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 func TestInternal_mapValueNode(t *testing.T) {
 	t.Run("Simple", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		if v, ok := n.get(2, 0, h.Hash(2), &h); !ok {
+		if v, ok := n.get(2, 0, h.Hash(2), h); !ok {
 			t.Fatal("expected ok")
 		} else if v != 3 {
 			t.Fatalf("unexpected value: %v", v)
@@ -961,10 +961,10 @@ func TestInternal_mapValueNode(t *testing.T) {
 	})
 
 	t.Run("KeyEqual", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var resized bool
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		other := n.set(2, 4, 0, h.Hash(2), &h, false, &resized).(*mapValueNode[int, int])
+		other := n.set(2, 4, 0, h.Hash(2), h, false, &resized).(*mapValueNode[int, int])
 		if other == n {
 			t.Fatal("expected new node")
 		} else if got, exp := other.keyHash, h.Hash(2); got != exp {
@@ -1008,10 +1008,10 @@ func TestInternal_mapValueNode(t *testing.T) {
 	t.Run("MergeNode", func(t *testing.T) {
 		// Inserting into a node with a different index in the mask should split into a bitmap node.
 		t.Run("NoConflict", func(t *testing.T) {
-			var h defaultHasher[int]
+			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(2), 2, 3)
-			other := n.set(4, 5, 0, h.Hash(4), &h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -1035,19 +1035,19 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 
 			// Ensure both values can be read.
-			if v, ok := other.get(2, 0, h.Hash(2), &h); !ok || v != 3 {
+			if v, ok := other.get(2, 0, h.Hash(2), h); !ok || v != 3 {
 				t.Fatalf("Get(2)=<%v,%v>", v, ok)
-			} else if v, ok := other.get(4, 0, h.Hash(4), &h); !ok || v != 5 {
+			} else if v, ok := other.get(4, 0, h.Hash(4), h); !ok || v != 5 {
 				t.Fatalf("Get(4)=<%v,%v>", v, ok)
 			}
 		})
 
 		// Reversing the nodes from NoConflict should yield the same result.
 		t.Run("NoConflictReverse", func(t *testing.T) {
-			var h defaultHasher[int]
+			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(4), 4, 5)
-			other := n.set(2, 3, 0, h.Hash(2), &h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			other := n.set(2, 3, 0, h.Hash(2), h, false, &resized).(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -1071,9 +1071,9 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 
 			// Ensure both values can be read.
-			if v, ok := other.get(2, 0, h.Hash(2), &h); !ok || v != 3 {
+			if v, ok := other.get(2, 0, h.Hash(2), h); !ok || v != 3 {
 				t.Fatalf("Get(2)=<%v,%v>", v, ok)
-			} else if v, ok := other.get(4, 0, h.Hash(4), &h); !ok || v != 5 {
+			} else if v, ok := other.get(4, 0, h.Hash(4), h); !ok || v != 5 {
 				t.Fatalf("Get(4)=<%v,%v>", v, ok)
 			}
 		})
