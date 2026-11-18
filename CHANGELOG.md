@@ -216,6 +216,9 @@ Changes since v0.6.0.
   uses the same function. The default hasher is still deterministic and not
   resistant to hash flooding; use a custom seeded `Hasher` for keys an attacker
   controls.
+- **`Map.Set` and `Map.Delete` allocate one object less.** The internal node
+  methods return whether a key was added or removed instead of writing through a
+  pointer that escaped to the heap. Time is unchanged within measurement noise.
 - **`NewHasher` picks the hasher for the key type once.** The built-in hasher no
   longer switches on the type of the key on every `Hash` call, and `Equal`
   compares the keys directly instead of boxing both in an interface. `Get` on a

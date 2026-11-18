@@ -844,7 +844,7 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 	var node mapNode[int, int] = &mapArrayNode[int, int]{}
 	for i := 0; i < n; i++ {
 		var resized bool
-		node = node.set(i, i, 0, h.Hash(i), h, false, &resized)
+		node, resized = node.set(i, i, 0, h.Hash(i), h, false)
 		if !resized {
 			t.Fatal("expected resize")
 		}
@@ -852,7 +852,7 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 		// Overwrite every node.
 		for j := 0; j <= i; j++ {
 			var resized bool
-			node = node.set(j, i*j, 0, h.Hash(j), h, false, &resized)
+			node, resized = node.set(j, i*j, 0, h.Hash(j), h, false)
 			if resized {
 				t.Fatalf("expected no resize: i=%d, j=%d", i, j)
 			}
@@ -879,7 +879,8 @@ func TestInternal_mapArrayNode(t *testing.T) {
 		n := &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized).(*mapArrayNode[int, int])
+			res, resized := n.set(i*10, i, 0, h.Hash(i*10), h, false)
+			n = res.(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
@@ -898,7 +899,8 @@ func TestInternal_mapArrayNode(t *testing.T) {
 		n := &mapArrayNode[int, int]{}
 		for i := 7; i >= 0; i-- {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized).(*mapArrayNode[int, int])
+			res, resized := n.set(i*10, i, 0, h.Hash(i*10), h, false)
+			n = res.(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
@@ -917,7 +919,7 @@ func TestInternal_mapArrayNode(t *testing.T) {
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 100; i++ {
 			var resized bool
-			n = n.set(i, i, 0, h.Hash(i), h, false, &resized)
+			n, resized = n.set(i, i, 0, h.Hash(i), h, false)
 			if !resized {
 				t.Fatal("expected resize")
 			}
@@ -935,13 +937,15 @@ func TestInternal_mapArrayNode(t *testing.T) {
 		h := NewHasher(0)
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
-			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), h, false, &resized)
+			n, _ = n.set(i*10, i, 0, h.Hash(i*10), h, false)
 		}
 
 		for _, i := range rand.Perm(8) {
-			var resized bool
-			n = n.delete(i*10, 0, h.Hash(i*10), h, false, &resized)
+			var removed bool
+			n, removed = n.delete(i*10, 0, h.Hash(i*10), h, false)
+			if !removed {
+				t.Fatalf("expected key %d to be removed", i*10)
+			}
 		}
 		if n != nil {
 			t.Fatal("expected nil rand")
@@ -964,7 +968,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 		h := NewHasher(0)
 		var resized bool
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		other := n.set(2, 4, 0, h.Hash(2), h, false, &resized).(*mapValueNode[int, int])
+		res, resized := n.set(2, 4, 0, h.Hash(2), h, false)
+		other := res.(*mapValueNode[int, int])
 		if other == n {
 			t.Fatal("expected new node")
 		} else if got, exp := other.keyHash, h.Hash(2); got != exp {
@@ -985,7 +990,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 		}
 		var resized bool
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapHashCollisionNode[int, int])
+		res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+		other := res.(*mapHashCollisionNode[int, int])
 		if got, exp := other.keyHash, h.Hash(2); got != exp {
 			t.Fatalf("keyHash=%v, expected %v", got, exp)
 		} else if got, exp := len(other.entries), 2; got != exp {
@@ -1011,7 +1017,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(2), 2, 3)
-			other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -1047,7 +1054,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(4), 4, 5)
-			other := n.set(2, 3, 0, h.Hash(2), h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(2, 3, 0, h.Hash(2), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -1086,7 +1094,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 			var resized bool
 			n := newMapValueNode(h.Hash(2), 2, 3)
-			other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x01); got != exp { // mask is zero, expect first slot.
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 1; got != exp {
