@@ -10,6 +10,11 @@ Changes since v0.6.0.
 
 ### Breaking changes
 
+- **`Hasher` contract:** keys that are `Equal` must have the same `Hash`. Maps now
+  compare stored hashes before calling `Equal` (including in the small array
+  node), so a hasher that breaks this rule can store such keys separately.
+- **`Queue` holds an `atomic.Pointer`** (for the cached reversal), so `go vet`
+  flags copying a `Queue` by value. Use `*Queue` as the API does.
 - **Go 1.26 or later is required.** The `go` directive in `go.mod` moved from
   1.25.0 to 1.26.0. CI runs on Go 1.26 and 1.27.
 - **`SetBuilder` and `SortedSetBuilder`**
@@ -228,7 +233,7 @@ Changes since v0.6.0.
   compares the keys directly instead of boxing both in an interface. `Get` on a
   map with `int` or `string` keys is 1.02-1.30x faster (1.09-1.66x on maps of up
   to 16 entries), a miss 1.00-1.16x faster; `Set` and `Delete` are level, and bytes
-  and allocations are unchanged. Hash values and iteration order are unchanged.
+  and allocations are unchanged. Hash values and iteration order are unchanged for integer keys.
   The unexported `defaultHasher` is replaced by `integerHasher` and `stringHasher`.
 - **`Queue` caches the reversal of its back list.** The first `Peek`, `Dequeue`
   or `Iterator` on a queue that has only a back list (the shape an `Enqueue`

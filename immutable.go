@@ -218,31 +218,31 @@ func (b *MapBuilder[K, V]) Map() *Map[K, V] {
 
 // Len returns the number of elements in the underlying map.
 func (b *MapBuilder[K, V]) Len() int {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Len()
 }
 
 // Get returns the value for the given key.
 func (b *MapBuilder[K, V]) Get(key K) (value V, ok bool) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Get(key)
 }
 
 // Set sets the value of the given key. See Map.Set() for additional details.
 func (b *MapBuilder[K, V]) Set(key K, value V) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.set(key, value, true)
 }
 
 // Delete removes the given key. See Map.Delete() for additional details.
 func (b *MapBuilder[K, V]) Delete(key K) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.delete(key, true)
 }
 
 // Iterator returns a new iterator for the underlying map.
 func (b *MapBuilder[K, V]) Iterator() *MapIterator[K, V] {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Iterator()
 }
 
@@ -1125,31 +1125,31 @@ func (b *SortedMapBuilder[K, V]) Map() *SortedMap[K, V] {
 
 // Len returns the number of elements in the underlying map.
 func (b *SortedMapBuilder[K, V]) Len() int {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Len()
 }
 
 // Get returns the value for the given key.
 func (b *SortedMapBuilder[K, V]) Get(key K) (value V, ok bool) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Get(key)
 }
 
 // Set sets the value of the given key. See SortedMap.Set() for additional details.
 func (b *SortedMapBuilder[K, V]) Set(key K, value V) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.set(key, value, true)
 }
 
 // Delete removes the given key. See SortedMap.Delete() for additional details.
 func (b *SortedMapBuilder[K, V]) Delete(key K) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.delete(key, true)
 }
 
 // Iterator returns a new iterator for the underlying map positioned at the first key.
 func (b *SortedMapBuilder[K, V]) Iterator() *SortedMapIterator[K, V] {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Iterator()
 }
 
@@ -1659,6 +1659,11 @@ type sortedMapIteratorElem[K, V any] struct {
 }
 
 // Hasher hashes keys and checks them for equality.
+//
+// A Hasher must be deterministic and must satisfy: if Equal(a, b) is true then
+// Hash(a) == Hash(b). Equal must be an equivalence relation. Maps compare stored
+// hashes before calling Equal, so keys that are Equal but hash differently are
+// stored as separate entries.
 type Hasher[K any] interface {
 	// Computes a hash for key.
 	Hash(key K) uint32
@@ -1701,12 +1706,12 @@ func NewHasher[K any](key K) Hasher[K] {
 	case string:
 		h = stringHasher{}
 	}
+	if hh, ok := h.(Hasher[K]); ok {
+		return hh
+	}
 	if h != nil {
-		// K is the type of key unless K is an interface type holding an int or a
-		// string; then the hasher is not a Hasher[K] and the fallback below is used.
-		if hh, ok := h.(Hasher[K]); ok {
-			return hh
-		}
+		// K is an interface type (such as any) that holds an int or a string.
+		return interfaceHasher[K]{}
 	}
 
 	// Fallback to reflection-based hasher otherwise.
@@ -1761,6 +1766,43 @@ func (h *reflectHasher[K]) Equal(a, b K) bool {
 	panic(fmt.Sprintf("immutable.reflectHasher.Equal: reflectHasher does not support %T type", a))
 
 }
+
+// interfaceHasher hashes keys of an interface type K whose dynamic values are
+// integers or strings. Equal compares dynamic type and value, as == does, so
+// int(5) and int64(5) are different keys.
+type interfaceHasher[K any] struct{}
+
+func (interfaceHasher[K]) Hash(key K) uint32 {
+	switch v := any(key).(type) {
+	case int:
+		return hashUint64(uint64(v))
+	case int8:
+		return hashUint64(uint64(v))
+	case int16:
+		return hashUint64(uint64(v))
+	case int32:
+		return hashUint64(uint64(v))
+	case int64:
+		return hashUint64(uint64(v))
+	case uint:
+		return hashUint64(uint64(v))
+	case uint8:
+		return hashUint64(uint64(v))
+	case uint16:
+		return hashUint64(uint64(v))
+	case uint32:
+		return hashUint64(uint64(v))
+	case uint64:
+		return hashUint64(v)
+	case uintptr:
+		return hashUint64(uint64(v))
+	case string:
+		return hashString(v)
+	}
+	panic(fmt.Sprintf("immutable.interfaceHasher.Hash: unsupported key type %T", key))
+}
+
+func (interfaceHasher[K]) Equal(a, b K) bool { return any(a) == any(b) }
 
 // hashUint64 returns a 32-bit hash for a 64-bit value.
 // For values that fit in 32 bits, return the lower 32 bits directly (preserves

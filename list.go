@@ -154,10 +154,10 @@ func valuesEqual[T any](mode equalityMode, a, b T) bool {
 // must be free of side effects. This method does not mutate the list and is safe
 // for concurrent use across goroutines.
 func (l *List[T]) ContainsFunc(value T, equal func(a, b T) bool) bool {
+	assert(equal != nil, "immutable.List.ContainsFunc: equal function must not be nil")
 	if l.size == 0 {
 		return false
 	}
-	assert(equal != nil, "immutable.List.ContainsFunc: equal function must not be nil")
 	for _, v := range l.tail {
 		if equal(v, value) {
 			return true
@@ -407,55 +407,55 @@ func (b *ListBuilder[T]) List() *List[T] {
 
 // Len returns the number of elements in the underlying list.
 func (b *ListBuilder[T]) Len() int {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	return b.list.Len()
 }
 
 // Get returns the value at the given index.
 func (b *ListBuilder[T]) Get(index int) T {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	return b.list.Get(index)
 }
 
 // Set updates the value at the given index.
 func (b *ListBuilder[T]) Set(index int, value T) {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	b.list = b.list.set(index, value, true)
 }
 
 // Append adds value to the end of the list.
 func (b *ListBuilder[T]) Append(value T) {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	b.list = b.list.append(value, true)
 }
 
 // Prepend adds value to the beginning of the list.
 func (b *ListBuilder[T]) Prepend(value T) {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	b.list = b.list.prepend(value, true)
 }
 
 // Slice updates the list with a sublist of elements between start and end index.
 func (b *ListBuilder[T]) Slice(start, end int) {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	b.list = b.list.slice(start, end, true)
 }
 
 // Iterator returns a new iterator for the underlying list.
 func (b *ListBuilder[T]) Iterator() *ListIterator[T] {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	return b.list.Iterator()
 }
 
 // Contains returns true if the underlying list contains the given value.
 func (b *ListBuilder[T]) Contains(value T) bool {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	return b.list.Contains(value)
 }
 
 // ContainsFunc returns true if the underlying list contains the given value using provided equality.
 func (b *ListBuilder[T]) ContainsFunc(value T, equal func(a, b T) bool) bool {
-	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation")
+	assert(b.list != nil, "immutable.ListBuilder: builder invalid after List() invocation, or used as a zero value")
 	return b.list.ContainsFunc(value, equal)
 }
 

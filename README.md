@@ -367,12 +367,13 @@ Builders are invalid after the call to `Map()`.
 
 ### Implementing a custom Hasher
 
-If you need to use a key type besides `int`, `uint`, or `string` then you'll
+If you need to use a key type besides the integer types and `string` then you'll
 need to create a custom `Hasher` implementation and pass it to `NewMap()` on
 creation.
 
 Hashers are fairly simple. They only need to generate hashes for a given key
-and check equality given two keys.
+and check equality given two keys. `Hash` must be deterministic, and keys that
+are `Equal` must have the same hash: maps compare hashes before calling `Equal`.
 
 **Security Note:** A poorly implemented `Hasher` can result in frequent hash
 collisions, which will degrade the `Map`'s performance from O(log n) to O(n),
@@ -386,8 +387,7 @@ type Hasher[K any] interface {
 }
 ```
 
-Please see the internal `intHasher`, `uintHasher`, `stringHasher`, and
-`byteSliceHasher` for examples.
+Please see the internal `integerHasher` and `stringHasher` for examples.
 
 
 ## Sorted Map

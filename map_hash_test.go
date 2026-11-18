@@ -1,6 +1,10 @@
 package immutable
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 // mapTrieStats describes the shape of a map's trie: how many values it holds,
 // how many nodes it has, how deep the deepest value is, and how many collision
@@ -275,4 +279,39 @@ func TestNewHasherInterfaceKeys(t *testing.T) {
 	if !s.Has("x") || !s.Has(7) || s.Has("y") {
 		t.Fatal("interface-keyed set lost keys")
 	}
+}
+
+func TestInterfaceKeysKeepDynamicTypes(t *testing.T) {
+	m := NewMap[any, string](nil).Set(int(5), "int").Set(int64(5), "int64").Set(uint8(5), "uint8").Set("5", "string")
+	if m.Len() != 4 {
+		t.Fatalf("Len = %d, want 4 (int(5), int64(5), uint8(5) and \"5\" are different keys)", m.Len())
+	}
+	for k, want := range map[any]string{int(5): "int", int64(5): "int64", uint8(5): "uint8", "5": "string"} {
+		if v, _ := m.Get(k); v != want {
+			t.Fatalf("Get(%T %v) = %q, want %q", k, k, v, want)
+		}
+	}
+	m = m.Delete(int64(5))
+	if m.Len() != 3 {
+		t.Fatalf("Len after Delete = %d, want 3", m.Len())
+	}
+}
+
+func TestContainsFuncNilEqualPanicsOnEmptyList(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	NewList[int]().ContainsFunc(1, nil)
+}
+
+func TestZeroValueBuilderMessageMentionsZeroValue(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "zero value") {
+			t.Fatalf("panic = %v, want a message mentioning the zero value", r)
+		}
+	}()
+	var b ListBuilder[int]
+	b.Append(1)
 }
