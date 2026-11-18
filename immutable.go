@@ -1702,9 +1702,11 @@ func NewHasher[K any](key K) Hasher[K] {
 		h = stringHasher{}
 	}
 	if h != nil {
-		// Every case above is a hasher of exactly the type of key, so this
-		// assertion cannot fail.
-		return h.(Hasher[K])
+		// K is the type of key unless K is an interface type holding an int or a
+		// string; then the hasher is not a Hasher[K] and the fallback below is used.
+		if hh, ok := h.(Hasher[K]); ok {
+			return hh
+		}
 	}
 
 	// Fallback to reflection-based hasher otherwise.

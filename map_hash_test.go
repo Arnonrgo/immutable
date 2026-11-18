@@ -262,3 +262,17 @@ func TestSortedMapToleratesComparerResultsBeyondOne(t *testing.T) {
 		}
 	}
 }
+
+func TestNewHasherInterfaceKeys(t *testing.T) {
+	m := NewMap[any, int](nil)
+	m = m.Set("a", 1).Set(2, 2).Set("b", 3)
+	for k, want := range map[any]int{"a": 1, 2: 2, "b": 3} {
+		if v, ok := m.Get(k); !ok || v != want {
+			t.Fatalf("Get(%v) = %v, %v; want %v", k, v, ok, want)
+		}
+	}
+	s := NewSet[any](nil, "x", 7)
+	if !s.Has("x") || !s.Has(7) || s.Has("y") {
+		t.Fatal("interface-keyed set lost keys")
+	}
+}
