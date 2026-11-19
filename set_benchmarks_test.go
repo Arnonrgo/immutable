@@ -10,7 +10,7 @@ type largeValueHasher struct{}
 
 func (h *largeValueHasher) Hash(v LargeValue) uint32 {
 	// Fast, stable hash combining ID and Name; adequate for benchmarking.
-	var hash uint32 = uint32(v.ID)
+	hash := uint32(v.ID)
 	for i := 0; i < len(v.Name); i++ {
 		hash = 31*hash + uint32(v.Name[i])
 	}
@@ -50,8 +50,12 @@ func BenchmarkSet_Operations(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
+			// Persistent delete of an existing value from the original, full-size
+			// set. The result is discarded so the set never shrinks; feeding it
+			// back would turn every Delete after the first size iterations into a
+			// no-op on a missing value.
 			for i := 0; i < b.N; i++ {
-				s = s.Delete(i % size)
+				sinkAny = s.Delete(i % size)
 			}
 		})
 
@@ -65,7 +69,7 @@ func BenchmarkSet_Operations(b *testing.B) {
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				_ = s.Has(i % size)
+				sinkBool = s.Has(i % size)
 			}
 		})
 	}

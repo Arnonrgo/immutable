@@ -10,3 +10,4 @@ memory-bank/private/
 
 # Memba per-developer user id
 .memba/.user_id
+*.test

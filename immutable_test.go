@@ -9,10 +9,7 @@ import (
 	"testing"
 )
 
-var (
-	veryVerbose = flag.Bool("vv", false, "very verbose")
-	randomN     = flag.Int("random.n", 100, "number of RunRandom() iterations")
-)
+var randomN = flag.Int("random.n", 100, "number of RunRandom() iterations")
 
 func TestList(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
@@ -180,50 +177,83 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("TestSliceFreesReferences", func(t *testing.T) {
-		/* Test that the leaf node in a sliced list contains zero'ed entries at
-		 * the correct positions. To do this we directly access the internal
-		 * tree structure of the list.
+		/* Test that a sliced list does not keep the values outside the slice
+		 * reachable. To do this we directly access the internal structure of
+		 * the list: the leaf of the trie contains zero'ed entries at the
+		 * correct positions, and a sliced tail is a copy of just its values.
+		 * 70 values are a trie of two leaves (64 values) and a tail of 6.
 		 */
+		var ints [70]int
 		l := NewList[*int]()
-		var ints [5]int
-		for i := range 5 {
+		for i := range ints {
 			l = l.Append(&ints[i])
 		}
-		sl := l.Slice(2, 4)
 
-		var findLeaf func(listNode[*int]) *listLeafNode[*int]
-		findLeaf = func(n listNode[*int]) *listLeafNode[*int] {
-			switch n := n.(type) {
-			case *listBranchNode[*int]:
-				if n.children[0] == nil {
-					t.Fatal("Failed to find leaf node due to nil child")
+		firstLeaf := func(n listNode[*int]) *listLeafNode[*int] {
+			for {
+				switch node := n.(type) {
+				case *listBranchNode[*int]:
+					n = nil
+					for _, c := range node.children {
+						if c != nil {
+							n = c
+							break
+						}
+					}
+					if n == nil {
+						t.Fatal("Failed to find leaf node: branch has no children")
+					}
+				case *listLeafNode[*int]:
+					return node
+				default:
+					t.Fatalf("Unexpected node %T", n)
 				}
-				return findLeaf(n.children[0])
-			case *listLeafNode[*int]:
-				return n
-			case *listSliceNode[*int]:
-				// For small lists using slice implementation, we need to convert to test the expected behavior
-				// This test is checking memory management in the trie structure, so skip for slice-based lists
-				t.Skip("Test not applicable to slice-based list implementation for small lists")
-				return nil
-			default:
-				panic("Unexpected case")
 			}
 		}
 
-		leaf := findLeaf(sl.root)
-		if leaf.occupied != 0b1100 {
-			t.Errorf("Expected occupied to be 1100, was %032b", leaf.occupied)
-		}
-
-		for i := 0; i < listNodeSize; i++ {
-			if 2 <= i && i < 4 {
-				if leaf.children[i] != &ints[i] {
-					t.Errorf("Position %v does not contain the right pointer?", i)
-				}
-			} else if leaf.children[i] != nil {
-				t.Errorf("Expected position %v to be cleared, was %v", i, leaf.children[i])
+		t.Run("Trie", func(t *testing.T) {
+			sl := l.Slice(34, 64) // the second leaf, without its first two values
+			leaf := firstLeaf(sl.root)
+			if want := uint32(0xFFFFFFFC); leaf.occupied != want { // slots 2 to 31
+				t.Errorf("Expected occupied to be %032b, was %032b", want, leaf.occupied)
 			}
+			for i := 0; i < listNodeSize; i++ {
+				if 2 <= i {
+					if leaf.children[i] != &ints[listNodeSize+i] {
+						t.Errorf("Position %v does not contain the right pointer?", i)
+					}
+				} else if leaf.children[i] != nil {
+					t.Errorf("Expected position %v to be cleared, was %v", i, leaf.children[i])
+				}
+			}
+			if len(sl.tail) != 0 {
+				t.Errorf("Expected an empty tail, got %d values", len(sl.tail))
+			}
+		})
+
+		// A slice that is only tail values, or whose end is inside a leaf, ends
+		// up as a tail of its own, and the tail is exactly as long as the slice.
+		for _, c := range []struct {
+			name       string
+			start, end int
+		}{
+			{"OnlyTail", 66, 68},
+			{"EndsInsideLeaf", 34, 36},
+			{"TrieAndTail", 34, 67},
+		} {
+			t.Run(c.name, func(t *testing.T) {
+				sl := l.Slice(c.start, c.end)
+				for i := range sl.tail {
+					if sl.tail[i] != &ints[c.end-len(sl.tail)+i] {
+						t.Errorf("tail[%d] holds the wrong pointer", i)
+					}
+				}
+				if cap(sl.tail) != len(sl.tail) {
+					t.Errorf("tail has room for %d values but holds %d: the old values stay reachable behind it",
+						cap(sl.tail), len(sl.tail))
+				}
+				checkListInvariants(t, sl)
+			})
 		}
 	})
 
@@ -257,10 +287,22 @@ func TestList(t *testing.T) {
 			default: // append
 				l.Append(rand.Intn(10000))
 			}
+			// The representation rules (ADR-005) are checked both for the persistent
+			// list and for the builder's list, which is updated in place. A check
+			// walks the whole trie, so it runs every 100 operations.
+			if i%100 == 99 {
+				checkListInvariants(t, l.im)
+				checkListInvariants(t, l.builder.list)
+				if t.Failed() {
+					t.Fatalf("invariant violated at operation %d", i)
+				}
+			}
 		}
 		if err := l.Validate(); err != nil {
 			t.Fatal(err)
 		}
+		checkListInvariants(t, l.im)
+		checkListInvariants(t, l.builder.list)
 	})
 }
 
@@ -278,10 +320,10 @@ func TestList_Contains(t *testing.T) {
 			l = l.Append(i)
 		}
 		if !l.Contains(0) || !l.Contains(5) || !l.Contains(9) {
-			t.Fatalf("expected present elements to be found in slice-backed list")
+			t.Fatalf("expected present elements to be found in a list that is only a tail")
 		}
 		if l.Contains(10) {
-			t.Fatalf("expected absent element to be false in slice-backed list")
+			t.Fatalf("expected absent element to be false in a list that is only a tail")
 		}
 	})
 
@@ -310,6 +352,60 @@ func TestList_Contains(t *testing.T) {
 		}
 		if l.Contains(c) {
 			t.Fatalf("did not expect to find 'baz'")
+		}
+	})
+
+	// Interface element type: comparability is decided per value, so a list of
+	// any may mix comparable and non-comparable dynamic types.
+	t.Run("InterfaceElement_MixedDynamicTypes", func(t *testing.T) {
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
+			l := NewList[any]()
+			for i := 0; i < n; i++ {
+				l = l.Append(i)
+			}
+			l = l.Append([]int{1, 2}).Append("x").Append(nil)
+			for _, want := range []any{0, n - 1, []int{1, 2}, "x", nil} {
+				if !l.Contains(want) {
+					t.Fatalf("n=%d: expected to find %#v", n, want)
+				}
+			}
+			for _, notWant := range []any{n, []int{1, 3}, "y", 1.5} {
+				if l.Contains(notWant) {
+					t.Fatalf("n=%d: did not expect to find %#v", n, notWant)
+				}
+			}
+		}
+	})
+
+	t.Run("ConcreteNonComparableStruct_DeepEqual", func(t *testing.T) {
+		type rec struct {
+			name string
+			tags []string
+		}
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
+			l := NewList[rec]()
+			for i := 0; i < n; i++ {
+				l = l.Append(rec{name: "r", tags: []string{fmt.Sprint(i)}})
+			}
+			if !l.Contains(rec{name: "r", tags: []string{"2"}}) {
+				t.Fatalf("n=%d: expected deep-equal match", n)
+			}
+			if l.Contains(rec{name: "r", tags: []string{"nope"}}) {
+				t.Fatalf("n=%d: did not expect a match", n)
+			}
+		}
+	})
+
+	t.Run("ConcreteComparableStruct", func(t *testing.T) {
+		type point struct{ x, y int }
+		for _, n := range []int{3, 100} { // tail only, and trie plus tail
+			l := NewList[point]()
+			for i := 0; i < n; i++ {
+				l = l.Append(point{i, i})
+			}
+			if !l.Contains(point{2, 2}) || l.Contains(point{2, 3}) {
+				t.Fatalf("n=%d: wrong result for comparable struct", n)
+			}
 		}
 	})
 
@@ -545,6 +641,7 @@ func BenchmarkBuiltinSlice_Append(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			a = append(a, i)
 		}
+		sinkAny = a // keep the appended slice observable
 	})
 	b.Run("Interface", func(b *testing.B) {
 		b.ReportAllocs()
@@ -552,6 +649,7 @@ func BenchmarkBuiltinSlice_Append(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			a = append(a, i)
 		}
+		sinkAny = a
 	})
 }
 
@@ -742,11 +840,11 @@ func ExampleListBuilder_Slice() {
 // Ensure node can support overwrites as it expands.
 func TestInternal_mapNode_Overwrite(t *testing.T) {
 	const n = 1000
-	var h defaultHasher[int]
+	h := NewHasher(0)
 	var node mapNode[int, int] = &mapArrayNode[int, int]{}
 	for i := 0; i < n; i++ {
 		var resized bool
-		node = node.set(i, i, 0, h.Hash(i), &h, false, &resized)
+		node, resized = node.set(i, i, 0, h.Hash(i), h, false)
 		if !resized {
 			t.Fatal("expected resize")
 		}
@@ -754,21 +852,21 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 		// Overwrite every node.
 		for j := 0; j <= i; j++ {
 			var resized bool
-			node = node.set(j, i*j, 0, h.Hash(j), &h, false, &resized)
+			node, resized = node.set(j, i*j, 0, h.Hash(j), h, false)
 			if resized {
 				t.Fatalf("expected no resize: i=%d, j=%d", i, j)
 			}
 		}
 
 		// Verify not found at each branch type.
-		if _, ok := node.get(1000000, 0, h.Hash(1000000), &h); ok {
+		if _, ok := node.get(1000000, 0, h.Hash(1000000), h); ok {
 			t.Fatal("expected no value")
 		}
 	}
 
 	// Verify all key/value pairs in map.
 	for i := 0; i < n; i++ {
-		if v, ok := node.get(i, 0, h.Hash(i), &h); !ok || v != i*(n-1) {
+		if v, ok := node.get(i, 0, h.Hash(i), h); !ok || v != i*(n-1) {
 			t.Fatalf("get(%d)=<%v,%v>", i, v, ok)
 		}
 	}
@@ -777,17 +875,18 @@ func TestInternal_mapNode_Overwrite(t *testing.T) {
 func TestInternal_mapArrayNode(t *testing.T) {
 	// Ensure 8 or fewer elements stays in an array node.
 	t.Run("Append", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized).(*mapArrayNode[int, int])
+			res, resized := n.set(i*10, i, 0, h.Hash(i*10), h, false)
+			n = res.(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := 0; j < i; j++ {
-				if v, ok := n.get(j*10, 0, h.Hash(j*10), &h); !ok || v != j {
+				if v, ok := n.get(j*10, 0, h.Hash(j*10), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -796,17 +895,18 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure 8 or fewer elements stays in an array node when inserted in reverse.
 	t.Run("Prepend", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := &mapArrayNode[int, int]{}
 		for i := 7; i >= 0; i-- {
 			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized).(*mapArrayNode[int, int])
+			res, resized := n.set(i*10, i, 0, h.Hash(i*10), h, false)
+			n = res.(*mapArrayNode[int, int])
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := i; j <= 7; j++ {
-				if v, ok := n.get(j*10, 0, h.Hash(j*10), &h); !ok || v != j {
+				if v, ok := n.get(j*10, 0, h.Hash(j*10), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -815,17 +915,17 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure array can transition between node types.
 	t.Run("Expand", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 100; i++ {
 			var resized bool
-			n = n.set(i, i, 0, h.Hash(i), &h, false, &resized)
+			n, resized = n.set(i, i, 0, h.Hash(i), h, false)
 			if !resized {
 				t.Fatal("expected resize")
 			}
 
 			for j := 0; j < i; j++ {
-				if v, ok := n.get(j, 0, h.Hash(j), &h); !ok || v != j {
+				if v, ok := n.get(j, 0, h.Hash(j), h); !ok || v != j {
 					t.Fatalf("get(%d)=<%v,%v>", j, v, ok)
 				}
 			}
@@ -834,16 +934,18 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 	// Ensure deleting elements returns the correct new node.
 	RunRandom(t, "Delete", func(t *testing.T, rand *rand.Rand) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var n mapNode[int, int] = &mapArrayNode[int, int]{}
 		for i := 0; i < 8; i++ {
-			var resized bool
-			n = n.set(i*10, i, 0, h.Hash(i*10), &h, false, &resized)
+			n, _ = n.set(i*10, i, 0, h.Hash(i*10), h, false)
 		}
 
 		for _, i := range rand.Perm(8) {
-			var resized bool
-			n = n.delete(i*10, 0, h.Hash(i*10), &h, false, &resized)
+			var removed bool
+			n, removed = n.delete(i*10, 0, h.Hash(i*10), h, false)
+			if !removed {
+				t.Fatalf("expected key %d to be removed", i*10)
+			}
 		}
 		if n != nil {
 			t.Fatal("expected nil rand")
@@ -853,9 +955,9 @@ func TestInternal_mapArrayNode(t *testing.T) {
 
 func TestInternal_mapValueNode(t *testing.T) {
 	t.Run("Simple", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		if v, ok := n.get(2, 0, h.Hash(2), &h); !ok {
+		if v, ok := n.get(2, 0, h.Hash(2), h); !ok {
 			t.Fatal("expected ok")
 		} else if v != 3 {
 			t.Fatalf("unexpected value: %v", v)
@@ -863,10 +965,11 @@ func TestInternal_mapValueNode(t *testing.T) {
 	})
 
 	t.Run("KeyEqual", func(t *testing.T) {
-		var h defaultHasher[int]
+		h := NewHasher(0)
 		var resized bool
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		other := n.set(2, 4, 0, h.Hash(2), &h, false, &resized).(*mapValueNode[int, int])
+		res, resized := n.set(2, 4, 0, h.Hash(2), h, false)
+		other := res.(*mapValueNode[int, int])
 		if other == n {
 			t.Fatal("expected new node")
 		} else if got, exp := other.keyHash, h.Hash(2); got != exp {
@@ -887,7 +990,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 		}
 		var resized bool
 		n := newMapValueNode(h.Hash(2), 2, 3)
-		other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapHashCollisionNode[int, int])
+		res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+		other := res.(*mapHashCollisionNode[int, int])
 		if got, exp := other.keyHash, h.Hash(2); got != exp {
 			t.Fatalf("keyHash=%v, expected %v", got, exp)
 		} else if got, exp := len(other.entries), 2; got != exp {
@@ -910,10 +1014,11 @@ func TestInternal_mapValueNode(t *testing.T) {
 	t.Run("MergeNode", func(t *testing.T) {
 		// Inserting into a node with a different index in the mask should split into a bitmap node.
 		t.Run("NoConflict", func(t *testing.T) {
-			var h defaultHasher[int]
+			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(2), 2, 3)
-			other := n.set(4, 5, 0, h.Hash(4), &h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -937,19 +1042,20 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 
 			// Ensure both values can be read.
-			if v, ok := other.get(2, 0, h.Hash(2), &h); !ok || v != 3 {
+			if v, ok := other.get(2, 0, h.Hash(2), h); !ok || v != 3 {
 				t.Fatalf("Get(2)=<%v,%v>", v, ok)
-			} else if v, ok := other.get(4, 0, h.Hash(4), &h); !ok || v != 5 {
+			} else if v, ok := other.get(4, 0, h.Hash(4), h); !ok || v != 5 {
 				t.Fatalf("Get(4)=<%v,%v>", v, ok)
 			}
 		})
 
 		// Reversing the nodes from NoConflict should yield the same result.
 		t.Run("NoConflictReverse", func(t *testing.T) {
-			var h defaultHasher[int]
+			h := NewHasher(0)
 			var resized bool
 			n := newMapValueNode(h.Hash(4), 4, 5)
-			other := n.set(2, 3, 0, h.Hash(2), &h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(2, 3, 0, h.Hash(2), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x14); got != exp {
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 2; got != exp {
@@ -973,9 +1079,9 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 
 			// Ensure both values can be read.
-			if v, ok := other.get(2, 0, h.Hash(2), &h); !ok || v != 3 {
+			if v, ok := other.get(2, 0, h.Hash(2), h); !ok || v != 3 {
 				t.Fatalf("Get(2)=<%v,%v>", v, ok)
-			} else if v, ok := other.get(4, 0, h.Hash(4), &h); !ok || v != 5 {
+			} else if v, ok := other.get(4, 0, h.Hash(4), h); !ok || v != 5 {
 				t.Fatalf("Get(4)=<%v,%v>", v, ok)
 			}
 		})
@@ -988,7 +1094,8 @@ func TestInternal_mapValueNode(t *testing.T) {
 			}
 			var resized bool
 			n := newMapValueNode(h.Hash(2), 2, 3)
-			other := n.set(4, 5, 0, h.Hash(4), h, false, &resized).(*mapBitmapIndexedNode[int, int])
+			res, resized := n.set(4, 5, 0, h.Hash(4), h, false)
+			other := res.(*mapBitmapIndexedNode[int, int])
 			if got, exp := other.bitmap, uint32(0x01); got != exp { // mask is zero, expect first slot.
 				t.Fatalf("bitmap=0x%02x, expected 0x%02x", got, exp)
 			} else if got, exp := len(other.nodes), 1; got != exp {
@@ -1489,16 +1596,28 @@ func BenchmarkBuiltinMap_Set(b *testing.B) {
 func BenchmarkBuiltinMap_Delete(b *testing.B) {
 	const n = 10000000
 
-	m := make(map[int]int)
-	for i := 0; i < n; i++ {
-		m[i] = i
+	fill := func() map[int]int {
+		m := make(map[int]int, n)
+		for i := 0; i < n; i++ {
+			m[i] = i
+		}
+		return m
 	}
+	m := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			m = fill()
+			b.StartTimer()
+		}
 		delete(m, i%n)
 	}
+	sinkInt = len(m)
 }
 
 func BenchmarkMap_Set(b *testing.B) {
@@ -1521,7 +1640,7 @@ func BenchmarkMap_Delete(b *testing.B) {
 
 	m := builder.Map()
 	for i := 0; i < b.N; i++ {
-		m.Delete(i % n) // Do not update map, always operate on original
+		sinkAny = m.Delete(i % n) // Do not update map, always operate on original
 	}
 }
 
@@ -1556,16 +1675,28 @@ func BenchmarkMapBuilder_Set(b *testing.B) {
 func BenchmarkMapBuilder_Delete(b *testing.B) {
 	const n = 10000000
 
-	builder := NewMapBuilder[int, int](nil)
-	for i := 0; i < n; i++ {
-		builder.Set(i, i)
+	fill := func() *MapBuilder[int, int] {
+		builder := NewMapBuilder[int, int](nil)
+		for i := 0; i < n; i++ {
+			builder.Set(i, i)
+		}
+		return builder
 	}
+	builder := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and Delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			builder = fill()
+			b.StartTimer()
+		}
 		builder.Delete(i % n)
 	}
+	sinkInt = builder.Len()
 }
 
 func ExampleMap_Set() {
@@ -1621,15 +1752,15 @@ func ExampleMap_Iterator() {
 		fmt.Println(k, v)
 	}
 	// Output:
-	// mango 400
-	// pear 700
-	// pineapple 800
 	// grape 200
-	// orange 500
 	// strawberry 900
-	// kiwi 300
-	// peach 600
+	// pineapple 800
 	// apple 100
+	// peach 600
+	// kiwi 300
+	// pear 700
+	// mango 400
+	// orange 500
 }
 
 func ExampleMapBuilder_Set() {
@@ -1950,8 +2081,8 @@ func TestSortedMap_Set(t *testing.T) {
 		var r string
 		func() {
 			defer func() { r = recover().(string) }()
-			m := NewSortedMap[float64, string](nil)
-			m = m.Set(float64(100), "bar")
+			// Panics: there is no default comparer for float64.
+			NewSortedMap[float64, string](nil).Set(float64(100), "bar")
 		}()
 		if r != `immutable.NewComparer: must set comparer for float64 type` {
 			t.Fatalf("unexpected panic: %q", r)
@@ -2412,7 +2543,7 @@ func BenchmarkSortedMap_Delete(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		m.Delete(i % n) // Do not update map, always operate on original
+		sinkAny = m.Delete(i % n) // Do not update map, always operate on original
 	}
 }
 
@@ -2457,16 +2588,28 @@ func BenchmarkSortedMapBuilder_Set(b *testing.B) {
 func BenchmarkSortedMapBuilder_Delete(b *testing.B) {
 	const n = 1000000
 
-	builder := NewSortedMapBuilder[int, int](nil)
-	for i := 0; i < n; i++ {
-		builder.Set(i, i)
+	fill := func() *SortedMapBuilder[int, int] {
+		builder := NewSortedMapBuilder[int, int](nil)
+		for i := 0; i < n; i++ {
+			builder.Set(i, i)
+		}
+		return builder
 	}
+	builder := fill()
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		// Every n iterations all keys are gone and Delete would become a no-op
+		// on a missing key, so refill outside the timed region.
+		if i > 0 && i%n == 0 {
+			b.StopTimer()
+			builder = fill()
+			b.StartTimer()
+		}
 		builder.Delete(i % n)
 	}
+	sinkInt = builder.Len()
 }
 
 func ExampleSortedMap_Set() {
@@ -2613,14 +2756,4 @@ func (h *mockHasher[K]) Hash(value K) uint32 {
 // Equal executes the mocked EqualFn function.
 func (h *mockHasher[K]) Equal(a, b K) bool {
 	return h.equal(a, b)
-}
-
-// mockComparer represents a mock implementation of immutable.Comparer.
-type mockComparer[K cmp.Ordered] struct {
-	compare func(a, b K) int
-}
-
-// Compare executes the mocked CompreFn function.
-func (h *mockComparer[K]) Compare(a, b K) int {
-	return h.compare(a, b)
 }

@@ -1,0 +1,113 @@
+Phase 4.2: List tail buffer (ADR-005), back-to-back A/B
+=========================================================
+toolchain: go1.27.4 darwin/arm64
+date: 2026-11-17
+load: average 165-175 on 10 cores (heavily loaded), so only interleaved
+      comparisons are used (alternating old, new, new, old, ...). Every time is the
+      minimum over 5 rounds of 100 ms. Allocation counts and bytes are exact.
+      "ns" for the builds below is per whole build, not per element; B and
+      allocs are per whole build too (divide by N for per-Append figures).
+
+Change
+  List keeps its last 0..32 values in tail []T outside the trie. Append copies
+  the tail and the List (2 allocations) and touches the trie once per 32
+  appends, when the full tail becomes a leaf. listSliceNode, toTrie and
+  listSliceThreshold are removed. See memory-bank/ADRs/ADR-005-list-tail-buffer.md.
+
+Method
+  OLD = 4c9057b (ADR-005 commit, old List code) in a detached worktree plus the new
+  Baseline_List_Small benchmark. NEW = working tree. Binaries built with
+  `go test -c`, run alternately by /tmp/ab_queue.py.
+
+Result against the ADR-005 model (T = int, N = 100,000, per Append)
+  modelled   2,048 B -> about 262 B (7.8x)
+  measured   1,863 B -> 256 B (7.3x), 4.69 -> 2.11 allocs, 52.5 ms -> 9.3 ms per
+             100,000 Appends (5.6x). The measured old figure is the average over a
+             build that starts small; the 2,048 B figure is the steady state at 100k.
+  The plan's 4.7 gate asks for 10x fewer B/op for Append at N=100k. It is NOT met:
+  7.3x. Reaching 10x needs ADR-005 option D (a shared tail with a CAS counter).
+
+Reading the tables
+  - Append: the headline. N=1,000: 3.0x time, 3.9x bytes; N=10,000: 4.5x, 5.9x;
+    N=100,000: 5.6x, 7.3x.
+  - Builder (ListBuilder.Append): 2.2-2.9x faster; at N=1,000 allocations fall
+    from 100 to 39 (no more slice node conversion).
+  - BatchBuilder and New: unchanged within noise (bytes +96 for the 32-slot tail
+    copy plus the larger List; the 0.87-0.97x time rows are inside the noise of
+    this machine, the same rows swing the other way between runs).
+  - Get, AppendBuiltGet, Iterator, Contains, Prepend: unchanged within noise.
+  - Set at N >= 1,000: +29-31 B/op (the List struct is 64 B, was 32 B) and one
+    allocation fewer; ns within noise (0.88x-1.12x either way across rows).
+  - Small lists: +8 B per list of up to 32 values (New N=1: 64 -> 72 B), one
+    allocation fewer, no slowdown; Append onto 32 values 2,080 -> 360 B,
+    onto 33 values 896 -> 80 B, New of 33 values 1,184 -> 360 B.
+
+== Build loops: Append, Builder, BatchBuilder, New ==
+benchmark                                                       old ns      new ns  speedup      old B      new B   old al   new al
+BenchmarkBaseline_List_Append/N1000                           179934.0     59723.0    3.01x     883340     225572     3036     2063
+BenchmarkBaseline_List_Append/N10000                         2718799.0    602729.0    4.51x   14204266    2425470    39303    20906
+BenchmarkBaseline_List_Append/N100000                       52554458.0   9326478.0    5.63x  186276532   25641414   469453   211444
+BenchmarkBaseline_List_BatchBuilder/N1000/batch1024             3886.0      3748.0    1.04x      10336      10432       35       36
+BenchmarkBaseline_List_BatchBuilder/N1000/batch128              4086.0      4062.0    1.01x      10784      10880       38       39
+BenchmarkBaseline_List_BatchBuilder/N1000/batch16               4111.0      4150.0    0.99x      10832      10928       40       41
+BenchmarkBaseline_List_BatchBuilder/N10000/batch1024           40935.0     45542.0    0.90x     114816     114976      330      331
+BenchmarkBaseline_List_BatchBuilder/N10000/batch128            39714.0     40865.0    0.97x     115264     115424      333      334
+BenchmarkBaseline_List_BatchBuilder/N10000/batch16             41655.0     40777.0    1.02x     115312     115472      335      336
+BenchmarkBaseline_List_BatchBuilder/N100000/batch1024         472861.0    495613.0    0.95x    1116932    1117223     3238     3239
+BenchmarkBaseline_List_BatchBuilder/N100000/batch128          479002.0    509404.0    0.94x    1117381    1117671     3241     3242
+BenchmarkBaseline_List_BatchBuilder/N100000/batch16           458366.0    467501.0    0.98x    1117428    1117717     3243     3244
+BenchmarkBaseline_List_Builder/N1000                           12828.0      5931.0    2.16x      14984      10072      100       39
+BenchmarkBaseline_List_Builder/N10000                         148357.0     61897.0    2.40x     101672      96760      391      330
+BenchmarkBaseline_List_Builder/N100000                       1928019.0    666465.0    2.89x     964523     959610     3295     3234
+BenchmarkBaseline_List_New/N1000                                2156.0      2133.0    1.01x      10336      10144       35       35
+BenchmarkBaseline_List_New/N10000                              20516.0     23528.0    0.87x     101888     101760      326      326
+BenchmarkBaseline_List_New/N100000                            230516.0    230307.0    1.00x    1016707    1016707     3230     3230
+
+== Reads and Set ==
+benchmark                                                       old ns      new ns  speedup      old B      new B   old al   new al
+BenchmarkBaseline_List_AppendBuiltGet/N1000                        3.1         3.2    0.97x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltGet/N10000                       5.0         4.9    1.02x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltGet/N100000                      6.8         6.7    1.01x          0          0        0        0
+BenchmarkBaseline_List_AppendBuiltSet/N1000                      160.4       195.4    0.82x        896        924        3        2
+BenchmarkBaseline_List_AppendBuiltSet/N10000                     324.1       308.0    1.05x       1472       1501        4        3
+BenchmarkBaseline_List_AppendBuiltSet/N100000                    574.8       556.9    1.03x       2048       2079        5        4
+BenchmarkBaseline_List_Contains/N1000                          10059.0      9074.0    1.11x        896        896        1        1
+BenchmarkBaseline_List_Contains/N100000                      1015685.0    860797.0    1.18x        896        896        1        1
+BenchmarkBaseline_List_Contains/N16                               57.7        57.8    1.00x          0          0        0        0
+BenchmarkBaseline_List_Get/N1000                                   3.1         3.3    0.94x          0          0        0        0
+BenchmarkBaseline_List_Get/N10000                                  5.0         5.1    0.97x          0          0        0        0
+BenchmarkBaseline_List_Get/N100000                                 6.6         6.7    0.99x          0          0        0        0
+BenchmarkBaseline_List_Set/N1000                                 182.6       182.4    1.00x        896        924        3        2
+BenchmarkBaseline_List_Set/N10000                                324.4       288.5    1.12x       1472       1501        4        3
+BenchmarkBaseline_List_Set/N100000                               552.2       620.4    0.89x       2048       2079        5        4
+BenchmarkList_Get/size-100                                         3.1         3.2    0.98x          0          0        0        0
+BenchmarkList_Get/size-1000                                        3.1         3.1    1.00x          0          0        0        0
+BenchmarkList_Get/size-10000                                       5.0         5.0    1.01x          0          0        0        0
+BenchmarkList_Get/size-100000                                      6.8         6.6    1.03x          0          0        0        0
+BenchmarkList_Iterator/Forward                                     7.3         6.7    1.09x          0          0        0        0
+BenchmarkList_Iterator/Reverse                                     7.1         6.8    1.06x          0          0        0        0
+BenchmarkList_Prepend                                            651.0       588.4    1.11x       1950       2008        4        4
+BenchmarkList_RandomSet/size-100                                 175.7       181.3    0.97x        896        903        3        2
+BenchmarkList_RandomSet/size-1000                                193.0       180.3    1.07x        896        924        3        2
+BenchmarkList_RandomSet/size-10000                               306.6       309.4    0.99x       1472       1501        4        3
+BenchmarkList_RandomSet/size-100000                              548.6       588.5    0.93x       2048       2079        5        4
+BenchmarkList_Set                                                447.6       510.7    0.88x       1472       1501        4        3
+
+== Small lists (Baseline_List_Small) ==
+benchmark                                                       old ns      new ns  speedup      old B      new B   old al   new al
+BenchmarkBaseline_List_Small/AppendLoop/N1                        61.3        43.3    1.41x        120        136        5        3
+BenchmarkBaseline_List_Small/AppendLoop/N32                     1997.0      1794.0    1.11x       6184       6448       98       65
+BenchmarkBaseline_List_Small/AppendLoop/N33                     2537.0      1836.0    1.38x       8264       6808      105       68
+BenchmarkBaseline_List_Small/AppendLoop/N8                       338.5       299.4    1.13x        808        880       26       17
+BenchmarkBaseline_List_Small/AppendOne/N1                         38.8        32.1    1.21x         72         80        3        2
+BenchmarkBaseline_List_Small/AppendOne/N32                       444.6        86.0    5.17x       2080        360        7        3
+BenchmarkBaseline_List_Small/AppendOne/N33                       199.2        30.5    6.54x        896         80        3        2
+BenchmarkBaseline_List_Small/AppendOne/N8                         47.8        43.5    1.10x        136        144        3        2
+BenchmarkBaseline_List_Small/New/N1                               32.4        25.6    1.27x         64         72        3        2
+BenchmarkBaseline_List_Small/New/N32                              73.5        76.4    0.96x        312        320        3        2
+BenchmarkBaseline_List_Small/New/N33                             263.8        86.7    3.04x       1184        360        4        3
+BenchmarkBaseline_List_Small/New/N8                               40.2        40.5    0.99x        120        128        3        2
+BenchmarkBaseline_List_Small/Set/N1                               36.1        29.9    1.21x         64         72        3        2
+BenchmarkBaseline_List_Small/Set/N32                              80.5        70.0    1.15x        312        320        3        2
+BenchmarkBaseline_List_Small/Set/N33                             178.1        74.2    2.40x        896        343        3        2
+BenchmarkBaseline_List_Small/Set/N8                               45.1        40.8    1.10x        120        128        3        2

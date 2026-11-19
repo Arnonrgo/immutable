@@ -1,0 +1,31 @@
+Baseline (576067d, 2026-11-17, load 50-85) against final (38bbde3, 2026-11-18, load ~10)
+=========================================================================================
+Medians of 10 samples of 200 ms. The baseline ran on a far busier machine, so the TIME ratios
+below are inflated by an unknown amount (read them as direction, not size). B/op and
+allocs/op are exact. Full tables: bench-baseline-2026-11-17.txt, bench-final-2026-11-18.txt.
+
+Exact (allocation) changes, N=100,000 unless noted
+  List.Append loop          2,440 -> 256 B/elem, 5.7 -> 2.1 allocs/elem
+  List.Set                  2,624 -> 2,079 B, 6 -> 4 allocs
+  Map.Set loop (rand)       1,710 -> 1,709 B/elem, 8.0 -> 7.0 allocs/elem
+  Map.Set one key           8 -> 7 allocs; Map.Delete one key 7 -> 6 allocs
+  Queue.DequeueBackOnly     240,048 -> 24 B, 10,002 -> 1 allocs (N=10,000)
+  Queue.PeekBackOnly        240,024 -> 0 B, 10,001 -> 0 allocs (N=10,000)
+
+Time, direction (final faster unless marked)
+  List.Append loop 4.9-8.8x; ListBuilder 2.9-4.2x; BatchListBuilder (batch 16) 12-598x (the old
+  one was quadratic in the batch count); NewList 7-11x; List.Get 1.4-1.7x; List.Set 1.5-1.8x
+  Map.Get 1.1-1.4x; Map.Set loop 1.1-1.3x; MapBuilder 1.1-1.2x; BatchMapBuilder 1.4-7.8x (one
+  row, N=1000 batch1024, is 0.64x slower); SortedMap.Get 1.1-1.2x; SortedMapBuilder level
+  Queue DequeueBackOnly 94-9,461x and PeekBackOnly 539-56,258x (the old back list was reversed
+  on every call); other Queue rows 1.0-1.5x
+
+Slower, and why (all known, documented in the 5.3 report)
+  MapString_Get N=100,000   0.59x   keys read in creation order: the old polynomial hash kept
+                                    consecutive keys on one cached trie path; rapidhash does not.
+                                    With keys read in random order the two are level (GetShuffled).
+  MapString_Get N=1,000     0.85x   short dense counter keys, trie shape (same effect)
+  MapString_Set N=100,000   0.91x, MapString_Builder N=100,000 0.81x   same locality effect on inserts
+  BatchMapBuilder N=1,000 batch1024  0.64x   30 -> 47 us; the old builder handled one batch of 1,000
+                                    in a single pass, the rewrite (plan 2.2) is 5-8x faster from N=10,000 up
+                                    and the old one was 5.7x slower than MapBuilder at N=10,000 batch1024

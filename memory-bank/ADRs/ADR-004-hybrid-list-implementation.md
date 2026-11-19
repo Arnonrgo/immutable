@@ -1,13 +1,13 @@
 # ADR-004: Hybrid List Implementation for Small List Performance
 
 ## Status
-Accepted
+Accepted. The slice node (`listSliceNode`) and its conversion to a trie were replaced by the tail buffer of [ADR-005](ADR-005-list-tail-buffer.md) on 2026-11-17: a list of up to 32 values is now a tail slice with no trie, and there is no conversion step. The small-list motivation below still holds; the `listSliceNode` mechanism does not.
 
 ## Date
 2024-07-23
 
 ## Context
-The `List` implementation was based on a persistent trie structure (HAMT). While this provides excellent `O(log n)` performance for large lists, benchmarks revealed significant overhead for small lists, which are a very common use case. Performance for operations like `Append` and `Prepend` was ~30x slower than a native Go slice, with ~50x more allocations.
+The `List` implementation was based on a persistent radix-32 vector trie (position-indexed, like Clojure's vectors; not a hash-array-mapped trie, which is what `Map` uses). While this provides excellent `O(log n)` performance for large lists, benchmarks revealed significant overhead for small lists, which are a very common use case. Performance for operations like `Append` and `Prepend` was ~30x slower than a native Go slice, with ~50x more allocations.
 
 ## Decision
 Implement a hybrid data structure for the `List`, similar to the existing `Map` optimization.
@@ -20,7 +20,7 @@ Implement a hybrid data structure for the `List`, similar to the existing `Map` 
 
 ### Positive
 - **Dramatic Performance Improvement:** Up to **2x faster** for common immutable operations (`Append`, `Prepend`) on small lists.
-- **~85% Memory Reduction:** Drastically reduces allocation overhead for small lists, lessening GC pressure.
+- **~85% Memory Reduction** (2024 figure for the slice node, not re-measurable since ADR-005 removed it; today `List.Append` onto 32 values costs 360 B, was 2,080 B before the tail buffer, see ADR-005 and the README): Drastically reduces allocation overhead for small lists, lessening GC pressure.
 - **Best of Both Worlds:** Achieves performance close to native slices for the common case (small lists) while retaining `O(log n)` scalability for large lists.
 - **API Unchanged:** This is a purely internal implementation detail. The public API of the `List` remains 100% backward compatible.
 - **Pattern Consistency:** Aligns the `List` implementation strategy with the already-proven successful strategy of the `Map`.

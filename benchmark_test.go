@@ -601,29 +601,15 @@ func BenchmarkBatchMapBuilder_vs_Regular(b *testing.B) {
 func BenchmarkStreamingListBuilder(b *testing.B) {
 	const size = 10000
 	const batchSize = 64
-	const autoFlushSize = 1000
 
-	b.Run("WithAutoFlush", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			builder := NewStreamingListBuilder[int](batchSize, autoFlushSize)
-			for j := 0; j < size; j++ {
-				builder.Append(j)
-			}
-			_ = builder.List()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		builder := NewStreamingListBuilder[int](batchSize)
+		for j := 0; j < size; j++ {
+			builder.Append(j)
 		}
-	})
-
-	b.Run("WithoutAutoFlush", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			builder := NewStreamingListBuilder[int](batchSize, 0)
-			for j := 0; j < size; j++ {
-				builder.Append(j)
-			}
-			_ = builder.List()
-		}
-	})
+		_ = builder.List()
+	}
 }
 
 func BenchmarkStreamingListBuilder_Operations(b *testing.B) {
@@ -636,7 +622,7 @@ func BenchmarkStreamingListBuilder_Operations(b *testing.B) {
 	b.Run("Filter", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			builder := NewStreamingListBuilder[int](32, 0)
+			builder := NewStreamingListBuilder[int](32)
 			builder.Filter(data, func(x int) bool { return x%2 == 0 })
 			_ = builder.List()
 		}
@@ -645,7 +631,7 @@ func BenchmarkStreamingListBuilder_Operations(b *testing.B) {
 	b.Run("Transform", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			builder := NewStreamingListBuilder[int](32, 0)
+			builder := NewStreamingListBuilder[int](32)
 			builder.Transform(data, func(x int) int { return x * 2 })
 			_ = builder.List()
 		}
@@ -670,64 +656,34 @@ func BenchmarkSmallMap_BatchBuilder(b *testing.B) {
 			})
 		}
 	})
-
-	b.Run("UpdateWithinThreshold", func(b *testing.B) {
-		for _, size := range sizes {
-			if size < 2 {
-				continue
-			}
-			b.Run(fmt.Sprintf("N%d", size), func(b *testing.B) {
-				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
-					// Start with size/2 existing entries
-					builder := NewBatchMapBuilder[int, int](nil, size)
-					for j := 0; j < size/2; j++ {
-						builder.Set(j, j)
-					}
-					m := builder.Map()
-
-					// Now flush remaining entries (updates + new) within threshold
-					builder2 := NewBatchMapBuilder[int, int](nil, size)
-					// attach existing map into builder2 by direct field move
-					builder2.m = m
-					// updates for first half
-					for j := 0; j < size/2; j++ {
-						builder2.Set(j, j*10)
-					}
-					// new keys
-					for j := size / 2; j < size; j++ {
-						builder2.Set(j, j*10)
-					}
-					_ = builder2.Map()
-				}
-			})
-		}
-	})
 }
 
 func BenchmarkSortedBatchBuilder(b *testing.B) {
 	const size = 1000
+	values := make([]string, size+1)
+	for j := range values {
+		values[j] = fmt.Sprintf("value-%d", j)
+	}
 
-	b.Run("SortedBuffer", func(b *testing.B) {
+	b.Run("Descending", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			builder := NewSortedBatchBuilder[int, string](nil, 32, true)
+			builder := NewSortedBatchBuilder[int, string](nil, 32)
 			for j := 0; j < size; j++ {
-				// Insert in reverse order to test sorting
-				builder.Set(size-j, fmt.Sprintf("value-%d", size-j))
+				builder.Set(size-j, values[size-j])
 			}
-			_ = builder.SortedMap()
+			sinkAny = builder.SortedMap()
 		}
 	})
 
-	b.Run("UnsortedBuffer", func(b *testing.B) {
+	b.Run("Ascending", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			builder := NewSortedBatchBuilder[int, string](nil, 32, false)
-			for j := 0; j < size; j++ {
-				builder.Set(size-j, fmt.Sprintf("value-%d", size-j))
+			builder := NewSortedBatchBuilder[int, string](nil, 32)
+			for j := 1; j <= size; j++ {
+				builder.Set(j, values[j])
 			}
-			_ = builder.SortedMap()
+			sinkAny = builder.SortedMap()
 		}
 	})
 }

@@ -20,7 +20,7 @@ Implement pointer-based structural sharing for array storage in all collection t
 ## Consequences
 
 ### Positive
-- **53% reduction in memory allocations** - eliminated the primary bottleneck
+- **53% reduction in memory allocations** - eliminated the primary bottleneck (figure from the 2024 benchmarks; the code it was measured against no longer exists, so it cannot be re-measured. Current figures: README "Current Performance Snapshot")
 - **Zero allocations for read operations** - dramatic performance improvement
 - **10-100x scaling benefits** for large value types
 - Maintained thread-safety and immutability guarantees

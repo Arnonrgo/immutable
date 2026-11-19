@@ -35,10 +35,11 @@
 // Comparer implementation to sort keys in the map.
 //
 // These collection types automatically provide built-in hasher and comparers
-// for int, string, and byte slice keys. If you are using one of these key types
-// then simply pass a nil into the constructor. Otherwise you will need to
-// implement a custom Hasher or Comparer type. Please see the provided
-// implementations for reference.
+// for integer and string keys (including named types whose underlying type is
+// an integer or string). If you are using one of these key types then simply
+// pass a nil into the constructor. Otherwise (floats, structs, byte slices,
+// and so on) you will need to implement a custom Hasher or Comparer type.
+// Please see the provided implementations for reference.
 package immutable
 
 import (
@@ -46,7 +47,6 @@ import (
 	"fmt"
 	"math/bits"
 	"reflect"
-	"sort"
 	"strings"
 )
 
@@ -75,7 +75,8 @@ type Map[K, V any] struct {
 
 // NewMap returns a new instance of Map. If hasher is nil, a default hasher
 // implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 func NewMap[K, V any](hasher Hasher[K]) *Map[K, V] {
 	return &Map[K, V]{
 		hasher: hasher,
@@ -85,7 +86,8 @@ func NewMap[K, V any](hasher Hasher[K]) *Map[K, V] {
 // NewMapOf returns a new instance of Map, containing a map of provided entries.
 //
 // If hasher is nil, a default hasher implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 func NewMapOf[K comparable, V any](hasher Hasher[K], entries map[K]V) *Map[K, V] {
 	m := &Map[K, V]{
 		hasher: hasher,
@@ -144,15 +146,15 @@ func (m *Map[K, V]) set(key K, value V, mutable bool) *Map[K, V] {
 	// If the map is empty, initialize with a simple array node.
 	if m.root == nil {
 		other.size = 1
-		other.root = &mapArrayNode[K, V]{entries: []mapEntry[K, V]{{key: key, value: value}}}
+		other.root = &mapArrayNode[K, V]{entries: []mapArrayEntry[K, V]{{keyHash: hasher.Hash(key), key: key, value: value}}}
 		return other
 	}
 
 	// Otherwise copy the map and delegate insertion to the root.
 	// Resized will return true if the key does not currently exist.
-	var resized bool
-	other.root = m.root.set(key, value, 0, hasher.Hash(key), hasher, mutable, &resized)
-	if resized {
+	var added bool
+	other.root, added = m.root.set(key, value, 0, hasher.Hash(key), hasher, mutable)
+	if added {
 		other.size++
 	}
 	return other
@@ -171,9 +173,8 @@ func (m *Map[K, V]) delete(key K, mutable bool) *Map[K, V] {
 	}
 
 	// If the delete did not change the node then return the original map.
-	var resized bool
-	newRoot := m.root.delete(key, 0, m.hasher.Hash(key), m.hasher, mutable, &resized)
-	if !resized {
+	newRoot, removed := m.root.delete(key, 0, m.hasher.Hash(key), m.hasher, mutable)
+	if !removed {
 		return m
 	}
 
@@ -209,7 +210,7 @@ func NewMapBuilder[K, V any](hasher Hasher[K]) *MapBuilder[K, V] {
 // Map returns the underlying map. Only call once.
 // Builder is invalid after call. Will panic on second invocation.
 func (b *MapBuilder[K, V]) Map() *Map[K, V] {
-	assert(b.m != nil, "immutable.SortedMapBuilder.Map(): duplicate call to fetch map")
+	assert(b.m != nil, "immutable.MapBuilder.Map(): duplicate call to fetch map")
 	m := b.m
 	b.m = nil
 	return m
@@ -217,39 +218,39 @@ func (b *MapBuilder[K, V]) Map() *Map[K, V] {
 
 // Len returns the number of elements in the underlying map.
 func (b *MapBuilder[K, V]) Len() int {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Len()
 }
 
 // Get returns the value for the given key.
 func (b *MapBuilder[K, V]) Get(key K) (value V, ok bool) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Get(key)
 }
 
 // Set sets the value of the given key. See Map.Set() for additional details.
 func (b *MapBuilder[K, V]) Set(key K, value V) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.set(key, value, true)
 }
 
 // Delete removes the given key. See Map.Delete() for additional details.
 func (b *MapBuilder[K, V]) Delete(key K) {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.delete(key, true)
 }
 
 // Iterator returns a new iterator for the underlying map.
 func (b *MapBuilder[K, V]) Iterator() *MapIterator[K, V] {
-	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.MapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Iterator()
 }
 
 // mapNode represents any node in the map tree.
 type mapNode[K, V any] interface {
 	get(key K, shift uint, keyHash uint32, h Hasher[K]) (value V, ok bool)
-	set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V]
-	delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V]
+	set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (node mapNode[K, V], added bool)
+	delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (node mapNode[K, V], removed bool)
 }
 
 var _ mapNode[string, any] = (*mapArrayNode[string, any])(nil)
@@ -269,15 +270,26 @@ var _ mapLeafNode[string, any] = (*mapHashCollisionNode[string, any])(nil)
 
 // mapArrayNode is a map node that stores key/value pairs in a slice.
 // Entries are stored in insertion order. An array node expands into a bitmap
-// indexed node once a given threshold size is crossed.
+// indexed node once a given threshold size is crossed. It is only ever the root
+// of a map of at most maxArrayMapSize entries.
 type mapArrayNode[K, V any] struct {
-	entries []mapEntry[K, V]
+	entries []mapArrayEntry[K, V]
 }
 
-// indexOf returns the entry index of the given key. Returns -1 if key not found.
-func (n *mapArrayNode[K, V]) indexOf(key K, h Hasher[K]) int {
+// mapArrayEntry is a key/value pair of an array node with the hash of its key.
+// The hash lets a lookup skip Equal for every other entry, and lets the node
+// grow into a trie without hashing its keys again.
+type mapArrayEntry[K, V any] struct {
+	keyHash uint32
+	key     K
+	value   V
+}
+
+// indexOf returns the entry index of the given key, whose hash is keyHash.
+// Returns -1 if key not found.
+func (n *mapArrayNode[K, V]) indexOf(key K, keyHash uint32, h Hasher[K]) int {
 	for i := range n.entries {
-		if h.Equal(n.entries[i].key, key) {
+		if n.entries[i].keyHash == keyHash && h.Equal(n.entries[i].key, key) {
 			return i
 		}
 	}
@@ -286,7 +298,7 @@ func (n *mapArrayNode[K, V]) indexOf(key K, h Hasher[K]) int {
 
 // get returns the value for the given key.
 func (n *mapArrayNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher[K]) (value V, ok bool) {
-	i := n.indexOf(key, h)
+	i := n.indexOf(key, keyHash, h)
 	if i == -1 {
 		return value, false
 	}
@@ -295,78 +307,85 @@ func (n *mapArrayNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher[K])
 
 // set inserts or updates the value for a given key. If the key is inserted and
 // the new size crosses the max size threshold, a bitmap indexed node is returned.
-func (n *mapArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
-	idx := n.indexOf(key, h)
+func (n *mapArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
+	idx := n.indexOf(key, keyHash, h)
 
-	// Mark as resized if the key doesn't exist.
-	if idx == -1 {
-		*resized = true
-	}
+	// The key is added if it doesn't exist.
+	added := idx == -1
 
 	// If we are adding and it crosses the max size threshold, expand the node.
-	// We do this by continually setting the entries to a value node and expanding.
-	if idx == -1 && len(n.entries) >= maxArrayMapSize {
-		var node mapNode[K, V] = newMapValueNode(h.Hash(key), key, value)
-		for _, entry := range n.entries {
-			node = node.set(entry.key, entry.value, 0, h.Hash(entry.key), h, false, resized)
-		}
-		return node
+	if added && len(n.entries) >= maxArrayMapSize {
+		return n.expand(key, value, keyHash, h), true
 	}
 
 	// Update in-place if mutable.
+	entry := mapArrayEntry[K, V]{keyHash: keyHash, key: key, value: value}
 	if mutable {
 		if idx != -1 {
-			n.entries[idx] = mapEntry[K, V]{key, value}
+			n.entries[idx] = entry
 		} else {
-			n.entries = append(n.entries, mapEntry[K, V]{key, value})
+			n.entries = append(n.entries, entry)
 		}
-		return n
+		return n, added
 	}
 
 	// Update existing entry if a match is found.
 	// Otherwise append to the end of the element list if it doesn't exist.
 	var other mapArrayNode[K, V]
 	if idx != -1 {
-		other.entries = make([]mapEntry[K, V], len(n.entries))
+		other.entries = make([]mapArrayEntry[K, V], len(n.entries))
 		copy(other.entries, n.entries)
-		other.entries[idx] = mapEntry[K, V]{key, value}
+		other.entries[idx] = entry
 	} else {
-		other.entries = make([]mapEntry[K, V], len(n.entries)+1)
+		other.entries = make([]mapArrayEntry[K, V], len(n.entries)+1)
 		copy(other.entries, n.entries)
-		other.entries[len(other.entries)-1] = mapEntry[K, V]{key, value}
+		other.entries[len(other.entries)-1] = entry
 	}
-	return &other
+	return &other, added
+}
+
+// expand returns a trie holding the entries of n and a new key. It starts from
+// a value node for the new key and sets the entries into it one by one. Every
+// node it touches was made here and is not shared yet, so the sets update in
+// place instead of copying a path per entry, and the stored hashes spare
+// hashing the keys again.
+func (n *mapArrayNode[K, V]) expand(key K, value V, keyHash uint32, h Hasher[K]) mapNode[K, V] {
+	var node mapNode[K, V] = newMapValueNode(keyHash, key, value)
+	for i := range n.entries {
+		e := &n.entries[i]
+		node, _ = node.set(e.key, e.value, 0, e.keyHash, h, true)
+	}
+	return node
 }
 
 // delete removes the given key from the node. Returns the same node if key does
 // not exist. Returns a nil node when removing the last entry.
-func (n *mapArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
-	idx := n.indexOf(key, h)
+func (n *mapArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
+	idx := n.indexOf(key, keyHash, h)
 
 	// Return original node if key does not exist.
 	if idx == -1 {
-		return n
+		return n, false
 	}
-	*resized = true
 
 	// Return nil if this node will contain no nodes.
 	if len(n.entries) == 1 {
-		return nil
+		return nil, true
 	}
 
 	// Update in-place, if mutable.
 	if mutable {
 		copy(n.entries[idx:], n.entries[idx+1:])
-		n.entries[len(n.entries)-1] = mapEntry[K, V]{}
+		n.entries[len(n.entries)-1] = mapArrayEntry[K, V]{}
 		n.entries = n.entries[:len(n.entries)-1]
-		return n
+		return n, true
 	}
 
 	// Otherwise create a copy with the given entry removed.
-	other := &mapArrayNode[K, V]{entries: make([]mapEntry[K, V], len(n.entries)-1)}
+	other := &mapArrayNode[K, V]{entries: make([]mapArrayEntry[K, V], len(n.entries)-1)}
 	copy(other.entries[:idx], n.entries[:idx])
 	copy(other.entries[idx:], n.entries[idx+1:])
-	return other
+	return other, true
 }
 
 // mapBitmapIndexedNode represents a map branch node with a variable number of
@@ -389,7 +408,7 @@ func (n *mapBitmapIndexedNode[K, V]) get(key K, shift uint, keyHash uint32, h Ha
 
 // set inserts or updates the value for the given key. If a new key is inserted
 // and the size crosses the max size threshold then a hash array node is returned.
-func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	// Extract the index for the bit segment of the key hash.
 	keyHashFrag := (keyHash >> shift) & mapNodeMask
 
@@ -397,19 +416,15 @@ func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uin
 	bit := uint32(1) << keyHashFrag
 	exists := (n.bitmap & bit) != 0
 
-	// Mark as resized if the key doesn't exist.
-	if !exists {
-		*resized = true
-	}
-
 	// Find index of node based on popcount of bits before it.
 	idx := bits.OnesCount32(n.bitmap & (bit - 1))
 
 	// If the node already exists, delegate set operation to it.
 	// If the node doesn't exist then create a simple value leaf node.
 	var newNode mapNode[K, V]
+	added := !exists
 	if exists {
-		newNode = n.nodes[idx].set(key, value, shift+mapNodeBits, keyHash, h, mutable, resized)
+		newNode, added = n.nodes[idx].set(key, value, shift+mapNodeBits, keyHash, h, mutable)
 	} else {
 		newNode = newMapValueNode(keyHash, key, value)
 	}
@@ -426,7 +441,7 @@ func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uin
 		}
 		other.nodes[keyHashFrag] = newNode
 		other.count++
-		return &other
+		return &other, true
 	}
 
 	// Update in-place if mutable.
@@ -439,7 +454,7 @@ func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uin
 			copy(n.nodes[idx+1:], n.nodes[idx:])
 			n.nodes[idx] = newNode
 		}
-		return n
+		return n, added
 	}
 
 	// If node exists at given slot then overwrite it with new node.
@@ -455,18 +470,18 @@ func (n *mapBitmapIndexedNode[K, V]) set(key K, value V, shift uint, keyHash uin
 		other.nodes[idx] = newNode
 		copy(other.nodes[idx+1:], n.nodes[idx:])
 	}
-	return other
+	return other, added
 }
 
 // delete removes the key from the tree. If the key does not exist then the
 // original node is returned. If removing the last child node then a nil is
 // returned. Note that shrinking the node will not convert it to an array node.
-func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	bit := uint32(1) << ((keyHash >> shift) & mapNodeMask)
 
 	// Return original node if key does not exist.
 	if (n.bitmap & bit) == 0 {
-		return n
+		return n, false
 	}
 
 	// Find index of node based on popcount of bits before it.
@@ -474,18 +489,18 @@ func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 
 	// Delegate delete to child node.
 	child := n.nodes[idx]
-	newChild := child.delete(key, shift+mapNodeBits, keyHash, h, mutable, resized)
+	newChild, removed := child.delete(key, shift+mapNodeBits, keyHash, h, mutable)
 
 	// Return original node if key doesn't exist in child.
-	if !*resized {
-		return n
+	if !removed {
+		return n, false
 	}
 
 	// Remove if returned child has been deleted.
 	if newChild == nil {
 		// If we won't have any children then return nil.
 		if len(n.nodes) == 1 {
-			return nil
+			return nil, true
 		}
 
 		// Update in-place if mutable.
@@ -494,14 +509,14 @@ func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 			copy(n.nodes[idx:], n.nodes[idx+1:])
 			n.nodes[len(n.nodes)-1] = nil
 			n.nodes = n.nodes[:len(n.nodes)-1]
-			return n
+			return n, true
 		}
 
 		// Return copy with bit removed from bitmap and node removed from node list.
 		other := &mapBitmapIndexedNode[K, V]{bitmap: n.bitmap ^ bit, nodes: make([]mapNode[K, V], len(n.nodes)-1)}
 		copy(other.nodes[:idx], n.nodes[:idx])
 		copy(other.nodes[idx:], n.nodes[idx+1:])
-		return other
+		return other, true
 	}
 
 	// Generate copy, if necessary.
@@ -513,7 +528,7 @@ func (n *mapBitmapIndexedNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 
 	// Update child.
 	other.nodes[idx] = newChild
-	return other
+	return other, true
 }
 
 // mapHashArrayNode is a map branch node that stores nodes in a fixed length
@@ -539,18 +554,18 @@ func (n *mapHashArrayNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher
 }
 
 // set returns a node with the value set for the given key.
-func (n *mapHashArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapHashArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	idx := (keyHash >> shift) & mapNodeMask
 	node := n.nodes[idx]
 
 	// If node at index doesn't exist, create a simple value leaf node.
 	// Otherwise delegate set to child node.
 	var newNode mapNode[K, V]
+	added := true
 	if node == nil {
-		*resized = true
 		newNode = newMapValueNode(keyHash, key, value)
 	} else {
-		newNode = node.set(key, value, shift+mapNodeBits, keyHash, h, mutable, resized)
+		newNode, added = node.set(key, value, shift+mapNodeBits, keyHash, h, mutable)
 	}
 
 	// Generate copy, if necessary.
@@ -564,25 +579,25 @@ func (n *mapHashArrayNode[K, V]) set(key K, value V, shift uint, keyHash uint32,
 		other.count++
 	}
 	other.nodes[idx] = newNode
-	return other
+	return other, added
 }
 
 // delete returns a node with the given key removed. Returns the same node if
 // the key does not exist. If node shrinks to within bitmap-indexed size then
 // converts to a bitmap-indexed node.
-func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	idx := (keyHash >> shift) & mapNodeMask
 	node := n.nodes[idx]
 
 	// Return original node if child is not found.
 	if node == nil {
-		return n
+		return n, false
 	}
 
 	// Return original node if child is unchanged.
-	newNode := node.delete(key, shift+mapNodeBits, keyHash, h, mutable, resized)
-	if !*resized {
-		return n
+	newNode, removed := node.delete(key, shift+mapNodeBits, keyHash, h, mutable)
+	if !removed {
+		return n, false
 	}
 
 	// If we remove a node and drop below a threshold, convert back to bitmap indexed node.
@@ -594,7 +609,7 @@ func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Has
 				other.nodes = append(other.nodes, child)
 			}
 		}
-		return other
+		return other, true
 	}
 
 	// Generate copy, if necessary.
@@ -608,7 +623,7 @@ func (n *mapHashArrayNode[K, V]) delete(key K, shift uint, keyHash uint32, h Has
 	if newNode == nil {
 		other.count--
 	}
-	return other
+	return other, true
 }
 
 // mapValueNode represents a leaf node with a single key/value pair.
@@ -636,7 +651,7 @@ func (n *mapValueNode[K, V]) keyHashValue() uint32 {
 
 // get returns the value for the given key.
 func (n *mapValueNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher[K]) (value V, ok bool) {
-	if !h.Equal(n.key, key) {
+	if n.keyHash != keyHash || !h.Equal(n.key, key) {
 		return value, false
 	}
 	return n.value, true
@@ -646,42 +661,40 @@ func (n *mapValueNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher[K])
 // the node's key then a new value node is returned. If key is not equal to the
 // node's key but has the same hash then a hash collision node is returned.
 // Otherwise the nodes are merged into a branch node.
-func (n *mapValueNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
-	// If the keys match then return a new value node overwriting the value.
-	if h.Equal(n.key, key) {
+func (n *mapValueNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
+	// If the keys match then return a new value node overwriting the value. Keys
+	// with different hashes differ, so Equal is only called on a hash match.
+	if n.keyHash == keyHash && h.Equal(n.key, key) {
 		// Update in-place if mutable.
 		if mutable {
 			n.value = value
-			return n
+			return n, false
 		}
 		// Otherwise return a new copy.
-		return newMapValueNode(n.keyHash, key, value)
+		return newMapValueNode(n.keyHash, key, value), false
 	}
-
-	*resized = true
 
 	// Recursively merge nodes together if key hashes are different.
 	if n.keyHash != keyHash {
-		return mergeIntoNode[K, V](n, shift, keyHash, key, value)
+		return mergeIntoNode[K, V](n, shift, keyHash, key, value), true
 	}
 
 	// Merge into collision node if hash matches.
 	return &mapHashCollisionNode[K, V]{keyHash: keyHash, entries: []mapEntry[K, V]{
 		{key: n.key, value: n.value},
 		{key: key, value: value},
-	}}
+	}}, true
 }
 
 // delete returns nil if the key matches the node's key. Otherwise returns the original node.
-func (n *mapValueNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapValueNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	// Return original node if the keys do not match.
-	if !h.Equal(n.key, key) {
-		return n
+	if n.keyHash != keyHash || !h.Equal(n.key, key) {
+		return n, false
 	}
 
 	// Otherwise remove the node if keys do match.
-	*resized = true
-	return nil
+	return nil, true
 }
 
 // mapHashCollisionNode represents a leaf node that contains two or more key/value
@@ -709,6 +722,9 @@ func (n *mapHashCollisionNode[K, V]) indexOf(key K, h Hasher[K]) int {
 
 // get returns the value for the given key.
 func (n *mapHashCollisionNode[K, V]) get(key K, shift uint, keyHash uint32, h Hasher[K]) (value V, ok bool) {
+	if n.keyHash != keyHash {
+		return value, false
+	}
 	for i := range n.entries {
 		if h.Equal(n.entries[i].key, key) {
 			return n.entries[i].value, true
@@ -718,29 +734,28 @@ func (n *mapHashCollisionNode[K, V]) get(key K, shift uint, keyHash uint32, h Ha
 }
 
 // set returns a copy of the node with key set to the given value.
-func (n *mapHashCollisionNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapHashCollisionNode[K, V]) set(key K, value V, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
 	// Merge node with key/value pair if this is not a hash collision.
 	if n.keyHash != keyHash {
-		*resized = true
-		return mergeIntoNode[K, V](n, shift, keyHash, key, value)
+		return mergeIntoNode[K, V](n, shift, keyHash, key, value), true
 	}
 
 	// Update in-place if mutable.
 	if mutable {
-		if idx := n.indexOf(key, h); idx == -1 {
-			*resized = true
+		idx := n.indexOf(key, h)
+		if idx == -1 {
 			n.entries = append(n.entries, mapEntry[K, V]{key, value})
 		} else {
 			n.entries[idx] = mapEntry[K, V]{key, value}
 		}
-		return n
+		return n, idx == -1
 	}
 
-	// Append to end of node if key doesn't exist & mark resized.
+	// Append to end of node if key doesn't exist.
 	// Otherwise copy nodes and overwrite at matching key index.
 	other := &mapHashCollisionNode[K, V]{keyHash: n.keyHash}
-	if idx := n.indexOf(key, h); idx == -1 {
-		*resized = true
+	idx := n.indexOf(key, h)
+	if idx == -1 {
 		other.entries = make([]mapEntry[K, V], len(n.entries)+1)
 		copy(other.entries, n.entries)
 		other.entries[len(other.entries)-1] = mapEntry[K, V]{key, value}
@@ -749,22 +764,22 @@ func (n *mapHashCollisionNode[K, V]) set(key K, value V, shift uint, keyHash uin
 		copy(other.entries, n.entries)
 		other.entries[idx] = mapEntry[K, V]{key, value}
 	}
-	return other
+	return other, idx == -1
 }
 
 // delete returns a node with the given key deleted. Returns the same node if
 // the key does not exist. If removing the key would shrink the node to a single
 // entry then a value node is returned.
-func (n *mapHashCollisionNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool, resized *bool) mapNode[K, V] {
+func (n *mapHashCollisionNode[K, V]) delete(key K, shift uint, keyHash uint32, h Hasher[K], mutable bool) (mapNode[K, V], bool) {
+	if n.keyHash != keyHash {
+		return n, false
+	}
 	idx := n.indexOf(key, h)
 
 	// Return original node if key is not found.
 	if idx == -1 {
-		return n
+		return n, false
 	}
-
-	// Mark as resized if key exists.
-	*resized = true
 
 	// Convert to value node if we move to one entry.
 	if len(n.entries) == 2 {
@@ -772,7 +787,7 @@ func (n *mapHashCollisionNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 			keyHash: n.keyHash,
 			key:     n.entries[idx^1].key,
 			value:   n.entries[idx^1].value,
-		}
+		}, true
 	}
 
 	// Remove entry in-place if mutable.
@@ -780,14 +795,14 @@ func (n *mapHashCollisionNode[K, V]) delete(key K, shift uint, keyHash uint32, h
 		copy(n.entries[idx:], n.entries[idx+1:])
 		n.entries[len(n.entries)-1] = mapEntry[K, V]{}
 		n.entries = n.entries[:len(n.entries)-1]
-		return n
+		return n, true
 	}
 
 	// Return copy without entry if immutable.
 	other := &mapHashCollisionNode[K, V]{keyHash: n.keyHash, entries: make([]mapEntry[K, V], len(n.entries)-1)}
 	copy(other.entries[:idx], n.entries[:idx])
 	copy(other.entries[idx:], n.entries[idx+1:])
-	return other
+	return other, true
 }
 
 // mergeIntoNode merges a key/value pair into an existing node.
@@ -964,7 +979,8 @@ type SortedMap[K, V any] struct {
 
 // NewSortedMap returns a new instance of SortedMap. If comparer is nil then
 // a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 func NewSortedMap[K, V any](comparer Comparer[K]) *SortedMap[K, V] {
 	return &SortedMap[K, V]{
 		comparer: comparer,
@@ -974,7 +990,8 @@ func NewSortedMap[K, V any](comparer Comparer[K]) *SortedMap[K, V] {
 // NewSortedMapOf returns a new instance of SortedMap, containing a map of provided entries.
 //
 // If comparer is nil then a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 func NewSortedMapOf[K comparable, V any](comparer Comparer[K], entries map[K]V) *SortedMap[K, V] {
 	m := &SortedMap[K, V]{
 		comparer: comparer,
@@ -1097,8 +1114,8 @@ func NewSortedMapBuilder[K, V any](comparer Comparer[K]) *SortedMapBuilder[K, V]
 	return &SortedMapBuilder[K, V]{m: NewSortedMap[K, V](comparer)}
 }
 
-// SortedMap returns the current copy of the map.
-// The returned map is safe to use even if after the builder continues to be used.
+// Map returns the underlying sorted map. Only call once.
+// Builder is invalid after call. Will panic on second invocation.
 func (b *SortedMapBuilder[K, V]) Map() *SortedMap[K, V] {
 	assert(b.m != nil, "immutable.SortedMapBuilder.Map(): duplicate call to fetch map")
 	m := b.m
@@ -1108,31 +1125,31 @@ func (b *SortedMapBuilder[K, V]) Map() *SortedMap[K, V] {
 
 // Len returns the number of elements in the underlying map.
 func (b *SortedMapBuilder[K, V]) Len() int {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Len()
 }
 
 // Get returns the value for the given key.
 func (b *SortedMapBuilder[K, V]) Get(key K) (value V, ok bool) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Get(key)
 }
 
 // Set sets the value of the given key. See SortedMap.Set() for additional details.
 func (b *SortedMapBuilder[K, V]) Set(key K, value V) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.set(key, value, true)
 }
 
 // Delete removes the given key. See SortedMap.Delete() for additional details.
 func (b *SortedMapBuilder[K, V]) Delete(key K) {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	b.m = b.m.delete(key, true)
 }
 
 // Iterator returns a new iterator for the underlying map positioned at the first key.
 func (b *SortedMapBuilder[K, V]) Iterator() *SortedMapIterator[K, V] {
-	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation")
+	assert(b.m != nil, "immutable.SortedMapBuilder: builder invalid after Map() invocation, or used as a zero value")
 	return b.m.Iterator()
 }
 
@@ -1174,8 +1191,22 @@ func (n *sortedMapBranchNode[K, V]) minKey() K {
 
 // indexOf returns the index of the key within the child nodes.
 func (n *sortedMapBranchNode[K, V]) indexOf(key K, c Comparer[K]) int {
-	if idx := sort.Search(len(n.elems), func(i int) bool { return c.Compare(n.elems[i].key, key) == 1 }); idx > 0 {
-		return idx - 1
+	// Find the last child whose minimum key is not greater than key (the first
+	// child if there is none). Keys are unique, so an exact match ends the search.
+	lo, hi := 0, len(n.elems)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		r := c.Compare(n.elems[mid].key, key)
+		if r == 0 {
+			return mid
+		} else if r < 0 {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	if lo > 0 {
+		return lo - 1
 	}
 	return 0
 }
@@ -1314,17 +1345,34 @@ func (n *sortedMapLeafNode[K, V]) minKey() K {
 
 // indexOf returns the index of the given key.
 func (n *sortedMapLeafNode[K, V]) indexOf(key K, c Comparer[K]) int {
-	return sort.Search(len(n.entries), func(i int) bool {
-		return c.Compare(n.entries[i].key, key) != -1 // GTE
-	})
+	idx, _ := n.find(key, c)
+	return idx
+}
+
+// find returns the index of the first entry whose key is not less than key,
+// and whether that entry's key equals key.
+func (n *sortedMapLeafNode[K, V]) find(key K, c Comparer[K]) (int, bool) {
+	lo, hi := 0, len(n.entries)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		r := c.Compare(n.entries[mid].key, key)
+		if r == 0 {
+			return mid, true
+		} else if r < 0 {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo, false
 }
 
 // get returns the value of the given key.
 func (n *sortedMapLeafNode[K, V]) get(key K, c Comparer[K]) (value V, ok bool) {
-	idx := n.indexOf(key, c)
+	idx, found := n.find(key, c)
 
-	// If the index is beyond the entry count or the key is not equal then return 'not found'.
-	if idx == len(n.entries) || c.Compare(n.entries[idx].key, key) != 0 {
+	// If the key is not found then return 'not found'.
+	if !found {
 		return value, false
 	}
 
@@ -1336,8 +1384,7 @@ func (n *sortedMapLeafNode[K, V]) get(key K, c Comparer[K]) (value V, ok bool) {
 // causes the node to grow beyond the maximum size then it is split in two.
 func (n *sortedMapLeafNode[K, V]) set(key K, value V, c Comparer[K], mutable bool, resized *bool) (sortedMapNode[K, V], sortedMapNode[K, V]) {
 	// Find the insertion index for the key.
-	idx := n.indexOf(key, c)
-	exists := idx < len(n.entries) && c.Compare(n.entries[idx].key, key) == 0
+	idx, exists := n.find(key, c)
 
 	// Update in-place, if mutable.
 	if mutable {
@@ -1388,10 +1435,10 @@ func (n *sortedMapLeafNode[K, V]) set(key K, value V, c Comparer[K], mutable boo
 // delete returns a copy of node with key removed. Returns the original node if
 // the key does not exist. Returns nil if the removed key is the last remaining key.
 func (n *sortedMapLeafNode[K, V]) delete(key K, c Comparer[K], mutable bool, resized *bool) sortedMapNode[K, V] {
-	idx := n.indexOf(key, c)
+	idx, found := n.find(key, c)
 
 	// Return original node if key is not found.
-	if idx >= len(n.entries) || c.Compare(n.entries[idx].key, key) != 0 {
+	if !found {
 		return n
 	}
 	*resized = true
@@ -1612,6 +1659,11 @@ type sortedMapIteratorElem[K, V any] struct {
 }
 
 // Hasher hashes keys and checks them for equality.
+//
+// A Hasher must be deterministic and must satisfy: if Equal(a, b) is true then
+// Hash(a) == Hash(b). Equal must be an equivalence relation. Maps compare stored
+// hashes before calling Equal, so keys that are Equal but hash differently are
+// stored as separate entries.
 type Hasher[K any] interface {
 	// Computes a hash for key.
 	Hash(key K) uint32
@@ -1621,11 +1673,45 @@ type Hasher[K any] interface {
 }
 
 // NewHasher returns the built-in hasher for a given key type.
+//
+// The hasher is chosen once, here, from the type of key, so Hash and Equal do not
+// switch on the type of the key on every call (they used to, which also boxed
+// both keys in an interface to compare them).
 func NewHasher[K any](key K) Hasher[K] {
 	// Attempt to use non-reflection based hasher first.
-	switch (any(key)).(type) {
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, string:
-		return &defaultHasher[K]{}
+	var h any
+	switch any(key).(type) {
+	case int:
+		h = integerHasher[int]{}
+	case int8:
+		h = integerHasher[int8]{}
+	case int16:
+		h = integerHasher[int16]{}
+	case int32:
+		h = integerHasher[int32]{}
+	case int64:
+		h = integerHasher[int64]{}
+	case uint:
+		h = integerHasher[uint]{}
+	case uint8:
+		h = integerHasher[uint8]{}
+	case uint16:
+		h = integerHasher[uint16]{}
+	case uint32:
+		h = integerHasher[uint32]{}
+	case uint64:
+		h = integerHasher[uint64]{}
+	case uintptr:
+		h = integerHasher[uintptr]{}
+	case string:
+		h = stringHasher{}
+	}
+	if hh, ok := h.(Hasher[K]); ok {
+		return hh
+	}
+	if h != nil {
+		// K is an interface type (such as any) that holds an int or a string.
+		return interfaceHasher[K]{}
 	}
 
 	// Fallback to reflection-based hasher otherwise.
@@ -1640,13 +1726,14 @@ func NewHasher[K any](key K) Hasher[K] {
 	panic(fmt.Sprintf("immutable.NewHasher: must set hasher for %T type", key))
 }
 
-// Hash returns a hash for value.
+// hashString returns a 32-bit hash for value: rapidhash (rapidhash.go) folded
+// from 64 to 32 bits. It replaces the polynomial hash 31*h + c, which gave
+// "Aa" and "BB" (and every string built from them) the same hash. The result is
+// the same in every process and on every platform, so map iteration order is
+// reproducible.
 func hashString(value string) uint32 {
-	var hash uint32
-	for i, value := 0, value; i < len(value); i++ {
-		hash = 31*hash + uint32(value[i])
-	}
-	return hash
+	h := rapidHash(value)
+	return uint32(h) ^ uint32(h>>32)
 }
 
 // reflectIntHasher implements a reflection-based Hasher for keys.
@@ -1660,12 +1747,7 @@ func (h *reflectHasher[K]) Hash(key K) uint32 {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return hashUint64(reflect.ValueOf(key).Uint())
 	case reflect.String:
-		var hash uint32
-		s := reflect.ValueOf(key).String()
-		for i := 0; i < len(s); i++ {
-			hash = 31*hash + uint32(s[i])
-		}
-		return hash
+		return hashString(reflect.ValueOf(key).String())
 	}
 	panic(fmt.Sprintf("immutable.reflectHasher.Hash: reflectHasher does not support %T type", key))
 }
@@ -1685,13 +1767,60 @@ func (h *reflectHasher[K]) Equal(a, b K) bool {
 
 }
 
+// interfaceHasher hashes keys of an interface type K whose dynamic values are
+// integers or strings. Equal compares dynamic type and value, as == does, so
+// int(5) and int64(5) are different keys.
+type interfaceHasher[K any] struct{}
+
+func (interfaceHasher[K]) Hash(key K) uint32 {
+	switch v := any(key).(type) {
+	case int:
+		return hashUint64(uint64(v))
+	case int8:
+		return hashUint64(uint64(v))
+	case int16:
+		return hashUint64(uint64(v))
+	case int32:
+		return hashUint64(uint64(v))
+	case int64:
+		return hashUint64(uint64(v))
+	case uint:
+		return hashUint64(uint64(v))
+	case uint8:
+		return hashUint64(uint64(v))
+	case uint16:
+		return hashUint64(uint64(v))
+	case uint32:
+		return hashUint64(uint64(v))
+	case uint64:
+		return hashUint64(v)
+	case uintptr:
+		return hashUint64(uint64(v))
+	case string:
+		return hashString(v)
+	}
+	panic(fmt.Sprintf("immutable.interfaceHasher.Hash: unsupported key type %T", key))
+}
+
+func (interfaceHasher[K]) Equal(a, b K) bool { return any(a) == any(b) }
+
 // hashUint64 returns a 32-bit hash for a 64-bit value.
 // For values that fit in 32 bits, return the lower 32 bits directly (preserves
-// historical behavior). This means sequential integer keys (0, 1, 2, …) get
-// identity hashes, which causes keys differing only in their lower 5 bits to
-// collide at the HAMT root level, producing deeper trees and more allocations.
-// Applying the finalizer unconditionally would improve distribution but would
-// break hash stability for existing users.
+// historical behavior). The HAMT consumes the hash 5 bits at a time starting
+// from the low end, so identity hashing spreads dense sequential keys (0, 1,
+// 2, …) evenly, but keys that share their low bits (multiples of 32, 1024, …)
+// all land in the same slot at each level, producing deeper trees (one or two
+// more levels at 100,000 keys).
+//
+// Mixing these values too was measured and rejected
+// (bench-phase5-3-int-hash-2026-11-17.txt, in git history at 4334d13): dense keys,
+// which are the common case (indexes, ids, timestamps), fill every slot of a
+// node under identity, so 1,000 consecutive keys take 33 nodes and two levels
+// where a mixed hash takes about 310 nodes and 2.65 levels, and building a map
+// in key order is 1.5-1.9x slower with a mixed hash. A mixed hash helps only
+// keys that share low bits, and it would change the iteration order users may
+// rely on. TestDefaultIntHashKeepsDenseKeysCompact pins this.
+//
 // For larger values, apply a SplitMix64-style finalizer and fold to 32 bits.
 func hashUint64(value uint64) uint32 {
 	if value <= 0xffffffff {
@@ -1706,45 +1835,29 @@ func hashUint64(value uint64) uint32 {
 	return uint32(x ^ (x >> 32))
 }
 
-// defaultHasher implements Hasher.
-type defaultHasher[K any] struct{}
+// integer is the built-in integer types the default hasher supports.
+type integer interface {
+	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | uintptr
+}
+
+// integerHasher is the default Hasher for the built-in integer types. A signed
+// key is sign-extended to 64 bits before it is hashed, as hashUint64 expects.
+type integerHasher[K integer] struct{}
 
 // Hash returns a hash for key.
-func (h *defaultHasher[K]) Hash(key K) uint32 {
-	switch x := (any(key)).(type) {
-	case int:
-		return hashUint64(uint64(x))
-	case int8:
-		return hashUint64(uint64(x))
-	case int16:
-		return hashUint64(uint64(x))
-	case int32:
-		return hashUint64(uint64(x))
-	case int64:
-		return hashUint64(uint64(x))
-	case uint:
-		return hashUint64(uint64(x))
-	case uint8:
-		return hashUint64(uint64(x))
-	case uint16:
-		return hashUint64(uint64(x))
-	case uint32:
-		return hashUint64(uint64(x))
-	case uint64:
-		return hashUint64(uint64(x))
-	case uintptr:
-		return hashUint64(uint64(x))
-	case string:
-		return hashString(x)
-	}
-	panic(fmt.Sprintf("immutable.defaultHasher.Hash: must set comparer for %T type", key))
-}
+func (integerHasher[K]) Hash(key K) uint32 { return hashUint64(uint64(key)) }
 
 // Equal returns true if a is equal to b. Otherwise returns false.
-// Panics if a and b are not comparable.
-func (h *defaultHasher[K]) Equal(a, b K) bool {
-	return any(a) == any(b)
-}
+func (integerHasher[K]) Equal(a, b K) bool { return a == b }
+
+// stringHasher is the default Hasher for string keys.
+type stringHasher struct{}
+
+// Hash returns a hash for key.
+func (stringHasher) Hash(key string) uint32 { return hashString(key) }
+
+// Equal returns true if a is equal to b. Otherwise returns false.
+func (stringHasher) Equal(a, b string) bool { return a == b }
 
 // Comparer allows the comparison of two keys for the purpose of sorting.
 type Comparer[K any] interface {

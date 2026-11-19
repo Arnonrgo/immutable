@@ -11,7 +11,8 @@ type Set[T any] struct {
 // NewSet returns a new instance of Set.
 //
 // If hasher is nil, a default hasher implementation will automatically be chosen based on the first key added.
-// Default hasher implementations only exist for int, string, and byte slice types.
+// Default hasher implementations only exist for integer and string types
+// (including named types whose underlying type is an integer or string).
 // NewSet can also take some initial values as varargs.
 func NewSet[T any](hasher Hasher[T], values ...T) Set[T] {
 	m := NewMap[T, struct{}](hasher)
@@ -84,8 +85,12 @@ func (itr *SetIterator[T]) Next() (val T, ok bool) {
 	return
 }
 
+// SetBuilder builds a Set with in-place updates. After calling Set(), the
+// builder becomes invalid: every method, including a second Set(), panics. It
+// must be created with NewSetBuilder; the zero value is not usable.
 type SetBuilder[T any] struct {
-	s *Set[T]
+	s    *Set[T]
+	done bool // Set() has been called
 }
 
 func NewSetBuilder[T any](hasher Hasher[T]) *SetBuilder[T] {
@@ -93,33 +98,39 @@ func NewSetBuilder[T any](hasher Hasher[T]) *SetBuilder[T] {
 	return &SetBuilder[T]{s: &s}
 }
 
+// live returns the set being built. It panics if Set() has been called or the
+// builder was not made by NewSetBuilder.
+func (b *SetBuilder[T]) live() *Set[T] {
+	assert(!b.done, "immutable.SetBuilder: builder invalid after Set() invocation")
+	assert(b.s != nil, "immutable.SetBuilder: zero value is not usable, create the builder with NewSetBuilder")
+	return b.s
+}
+
 // Set returns the current copy of the set and invalidates the builder.
 // The builder should not be used after this call.
 func (b *SetBuilder[T]) Set() Set[T] {
-	assert(b.s != nil, "immutable.SetBuilder.Set(): duplicate call to fetch set")
-	s := b.s
-	b.s = nil
+	assert(!b.done, "immutable.SetBuilder.Set(): duplicate call to fetch set")
+	s := b.live()
+	b.s, b.done = nil, true
 	return *s
 }
 
 func (b *SetBuilder[T]) Add(val T) {
-	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
-	b.s.m = b.s.m.set(val, struct{}{}, true)
+	s := b.live()
+	s.m = s.m.set(val, struct{}{}, true)
 }
 
 func (b *SetBuilder[T]) Delete(val T) {
-	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
-	b.s.m = b.s.m.delete(val, true)
+	s := b.live()
+	s.m = s.m.delete(val, true)
 }
 
 func (b *SetBuilder[T]) Has(val T) bool {
-	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
-	return b.s.Has(val)
+	return b.live().Has(val)
 }
 
 func (b *SetBuilder[T]) Len() int {
-	assert(b.s != nil, "immutable.SetBuilder: builder invalid after Set() invocation")
-	return b.s.Len()
+	return b.live().Len()
 }
 
 type SortedSet[T any] struct {
@@ -130,7 +141,8 @@ type SortedSet[T any] struct {
 //
 // If comparer is nil then
 // a default comparer is set after the first key is inserted. Default comparers
-// exist for int, string, and byte slice keys.
+// exist for integer and string keys (including named types whose underlying
+// type is an integer or string).
 // NewSortedSet can also take some initial values as varargs.
 func NewSortedSet[T any](comparer Comparer[T], values ...T) SortedSet[T] {
 	m := NewSortedMap[T, struct{}](comparer)
@@ -222,8 +234,13 @@ func (itr *SortedSetIterator[T]) Seek(val T) {
 	itr.mi.Seek(val)
 }
 
+// SortedSetBuilder builds a SortedSet with in-place updates. After calling
+// SortedSet(), the builder becomes invalid: every method, including a second
+// SortedSet(), panics. It must be created with NewSortedSetBuilder; the zero
+// value is not usable.
 type SortedSetBuilder[T any] struct {
-	s *SortedSet[T]
+	s    *SortedSet[T]
+	done bool // SortedSet() has been called
 }
 
 func NewSortedSetBuilder[T any](comparer Comparer[T]) *SortedSetBuilder[T] {
@@ -231,31 +248,37 @@ func NewSortedSetBuilder[T any](comparer Comparer[T]) *SortedSetBuilder[T] {
 	return &SortedSetBuilder[T]{s: &s}
 }
 
+// live returns the set being built. It panics if SortedSet() has been called or
+// the builder was not made by NewSortedSetBuilder.
+func (b *SortedSetBuilder[T]) live() *SortedSet[T] {
+	assert(!b.done, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
+	assert(b.s != nil, "immutable.SortedSetBuilder: zero value is not usable, create the builder with NewSortedSetBuilder")
+	return b.s
+}
+
 func (b *SortedSetBuilder[T]) Add(val T) {
-	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
-	b.s.m = b.s.m.set(val, struct{}{}, true)
+	s := b.live()
+	s.m = s.m.set(val, struct{}{}, true)
 }
 
 func (b *SortedSetBuilder[T]) Delete(val T) {
-	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
-	b.s.m = b.s.m.delete(val, true)
+	s := b.live()
+	s.m = s.m.delete(val, true)
 }
 
 func (b *SortedSetBuilder[T]) Has(val T) bool {
-	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
-	return b.s.Has(val)
+	return b.live().Has(val)
 }
 
 func (b *SortedSetBuilder[T]) Len() int {
-	assert(b.s != nil, "immutable.SortedSetBuilder: builder invalid after SortedSet() invocation")
-	return b.s.Len()
+	return b.live().Len()
 }
 
 // SortedSet returns the built set and invalidates the builder.
 // The builder should not be used after this call.
 func (b *SortedSetBuilder[T]) SortedSet() SortedSet[T] {
-	assert(b.s != nil, "immutable.SortedSetBuilder.SortedSet(): duplicate call to fetch sorted set")
-	set := b.s
-	b.s = nil
-	return *set
+	assert(!b.done, "immutable.SortedSetBuilder.SortedSet(): duplicate call to fetch sorted set")
+	s := b.live()
+	b.s, b.done = nil, true
+	return *s
 }
