@@ -1,9 +1,0 @@
-Phase 6.1: default.pgo evaluation (2026-11-18)
-Method: three test binaries (-pgo=off, existing default.pgo from February, profile of the final code),
-run interleaved, 5 rounds of 100 ms, min of mins, 36 benchmarks (Map/MapString/List/SortedMap Get, Set, SetOne).
-Result (off / with-profile; >1 means the profile is faster):
-  existing default.pgo : 0.97-1.05x, mostly 1.00x  -> no effect
-  regenerated profile  : List.Get up to 1.14x, Map reads/SetOne +1-9%, MapString_Get 0.93x -> mixed
-Decision: default.pgo left as is. A PGO profile only applies to main packages built in this module
-(the test binaries), so it does nothing for library users. Removing it or documenting it as test-only is the owner's call (6.4).
-README procedure corrected: `go tool pgo` does not exist; a pprof CPU profile is accepted directly.

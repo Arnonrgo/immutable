@@ -1813,7 +1813,7 @@ func (interfaceHasher[K]) Equal(a, b K) bool { return any(a) == any(b) }
 // more levels at 100,000 keys).
 //
 // Mixing these values too was measured and rejected
-// (memory-bank/reports/bench-phase5-3-int-hash-2026-11-17.txt): dense keys,
+// (bench-phase5-3-int-hash-2026-11-17.txt, in git history at 4334d13): dense keys,
 // which are the common case (indexes, ids, timestamps), fill every slot of a
 // node under identity, so 1,000 consecutive keys take 33 nodes and two levels
 // where a mixed hash takes about 310 nodes and 2.65 levels, and building a map

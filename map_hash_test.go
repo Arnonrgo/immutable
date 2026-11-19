@@ -48,7 +48,7 @@ func trieStats[K, V any](m *Map[K, V]) mapTrieStats {
 // hash per level, so dense keys (indexes, ids, unix timestamps) fill every slot
 // of a node before it needs a child: 1,000 consecutive keys take 33 nodes and
 // two levels, where a mixed hash takes about 310 nodes and 2.65 levels on
-// average (memory-bank/reports/bench-phase5-3-int-hash-2026-11-17.txt). A
+// average (bench-phase5-3-int-hash-2026-11-17.txt, in git history at 4334d13). A
 // mixing finalizer would be slower to build and read for these keys.
 // Keys above 2^32 are mixed, so they do not collide just because they share
 // their low bits.

@@ -538,7 +538,7 @@ key that was set twice counts twice. `Flush()` is a deprecated no-op.
 same keys, back to back, in the same process; the machine was heavily loaded, so
 the ratios are from an interleaved comparison of 200 rounds rather than from
 separate benchmark runs; see
-`memory-bank/reports/bench-phase2-2-batchmap-ab-2026-11-17.txt`):
+`bench-phase2-2-batchmap-ab-2026-11-17.txt` (deleted from the tree, in git history at 4334d13):
 
 | Entries | random int keys | sequential int keys |
 |---|---|---|
