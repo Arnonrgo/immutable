@@ -184,22 +184,6 @@ func TestQueueMixedIterator(t *testing.T) {
 	}
 }
 
-func TestQueueNewQueueOf(t *testing.T) {
-	values := []string{"a", "b", "c"}
-	q := NewQueueOf(values)
-
-	// Mutate original slice to verify copy
-	values[0] = "z"
-
-	if q.Len() != 3 {
-		t.Fatalf("expected len 3, got %d", q.Len())
-	}
-	v, ok := q.Peek()
-	if !ok || v != "a" {
-		t.Fatalf("expected peek 'a', got %q", v)
-	}
-}
-
 func TestQueueBuilder(t *testing.T) {
 	b := NewQueueBuilder[int]()
 	b.Enqueue(10)

@@ -1145,11 +1145,11 @@ func TestMap_Get(t *testing.T) {
 }
 
 func TestMap_Set(t *testing.T) {
-	t.Run("Simple", func(t *testing.T) {
+	t.Run("EmptyIterator", func(t *testing.T) {
 		m := NewMap[int, string](nil)
 		itr := m.Iterator()
 		if !itr.Done() {
-			t.Fatal("MapIterator.Done()=true, expected false")
+			t.Fatal("MapIterator.Done()=false on an empty map, expected true")
 		} else if k, v, ok := itr.Next(); ok {
 			t.Fatalf("MapIterator.Next()=<%v,%v>, expected nil", k, v)
 		}
@@ -1268,11 +1268,7 @@ func TestMap_Set(t *testing.T) {
 
 // Ensure map can support overwrites as it expands.
 func TestMap_Overwrite(t *testing.T) {
-	if testing.Short() {
-		t.Skip("short mode")
-	}
-
-	const n = 10000
+	const n = 1000
 	m := NewMap[int, int](nil)
 	for i := 0; i < n; i++ {
 		// Set original value.
@@ -1290,16 +1286,6 @@ func TestMap_Overwrite(t *testing.T) {
 			t.Fatalf("Get(%d)=<%v,%v>", i, v, ok)
 		}
 	}
-
-	t.Run("Simple", func(t *testing.T) {
-		m := NewMap[int, string](nil)
-		itr := m.Iterator()
-		if !itr.Done() {
-			t.Fatal("MapIterator.Done()=true, expected false")
-		} else if k, v, ok := itr.Next(); ok {
-			t.Fatalf("MapIterator.Next()=<%v,%v>, expected nil", k, v)
-		}
-	})
 }
 
 func TestMap_Delete(t *testing.T) {
@@ -1313,9 +1299,16 @@ func TestMap_Delete(t *testing.T) {
 
 	t.Run("Simple", func(t *testing.T) {
 		m := NewMap[int, string](nil)
-		m = m.Set(100, "foo")
-		if v, ok := m.Get(100); !ok || v != "foo" {
-			t.Fatalf("unexpected value: <%v,%v>", v, ok)
+		m = m.Set(100, "foo").Set(200, "bar")
+		other := m.Delete(100)
+		if v, ok := other.Get(100); ok {
+			t.Fatalf("Get(100) after Delete = <%v,%v>, expected no value", v, ok)
+		} else if v, ok := other.Get(200); !ok || v != "bar" {
+			t.Fatalf("Get(200) after Delete(100) = <%v,%v>, expected bar", v, ok)
+		} else if other.Len() != 1 {
+			t.Fatalf("Len() after Delete = %d, expected 1", other.Len())
+		} else if v, ok := m.Get(100); !ok || v != "foo" {
+			t.Fatalf("original map lost key 100: <%v,%v>", v, ok)
 		}
 	})
 

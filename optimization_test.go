@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-// TestLazyCopyOnWrite verifies that the lazy copy-on-write optimization
-// maintains immutability guarantees while improving performance
-func TestLazyCopyOnWrite(t *testing.T) {
+// TestMap_PersistentVersionsAreIndependent checks that a map version is not
+// changed by Set calls on versions derived from it.
+func TestMap_PersistentVersionsAreIndependent(t *testing.T) {
 	// Create a map and add elements to trigger mapHashArrayNode usage
 	m := NewMap[int, string](nil)
 

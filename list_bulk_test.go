@@ -2,6 +2,7 @@ package immutable
 
 import (
 	"fmt"
+	"runtime"
 	"slices"
 	"testing"
 )
@@ -167,12 +168,15 @@ func TestNewList_StringsAndPointers(t *testing.T) {
 	}
 	ls := NewList(strs...)
 	lp := NewList(ptrs...)
+	// Drop the pointer slice and collect, so the list alone keeps the ints alive.
+	ptrs = nil
+	runtime.GC()
 	for i := 0; i < n; i++ {
 		if ls.Get(i) != strs[i] {
 			t.Fatalf("string mismatch at %d", i)
 		}
-		if lp.Get(i) != ptrs[i] {
-			t.Fatalf("pointer mismatch at %d", i)
+		if *lp.Get(i) != i {
+			t.Fatalf("pointer element %d points to %d", i, *lp.Get(i))
 		}
 	}
 }
