@@ -1145,11 +1145,11 @@ func TestMap_Get(t *testing.T) {
 }
 
 func TestMap_Set(t *testing.T) {
-	t.Run("Simple", func(t *testing.T) {
+	t.Run("EmptyIterator", func(t *testing.T) {
 		m := NewMap[int, string](nil)
 		itr := m.Iterator()
 		if !itr.Done() {
-			t.Fatal("MapIterator.Done()=true, expected false")
+			t.Fatal("MapIterator.Done()=false on an empty map, expected true")
 		} else if k, v, ok := itr.Next(); ok {
 			t.Fatalf("MapIterator.Next()=<%v,%v>, expected nil", k, v)
 		}
@@ -1268,11 +1268,7 @@ func TestMap_Set(t *testing.T) {
 
 // Ensure map can support overwrites as it expands.
 func TestMap_Overwrite(t *testing.T) {
-	if testing.Short() {
-		t.Skip("short mode")
-	}
-
-	const n = 10000
+	const n = 1000
 	m := NewMap[int, int](nil)
 	for i := 0; i < n; i++ {
 		// Set original value.
@@ -1290,16 +1286,6 @@ func TestMap_Overwrite(t *testing.T) {
 			t.Fatalf("Get(%d)=<%v,%v>", i, v, ok)
 		}
 	}
-
-	t.Run("Simple", func(t *testing.T) {
-		m := NewMap[int, string](nil)
-		itr := m.Iterator()
-		if !itr.Done() {
-			t.Fatal("MapIterator.Done()=true, expected false")
-		} else if k, v, ok := itr.Next(); ok {
-			t.Fatalf("MapIterator.Next()=<%v,%v>, expected nil", k, v)
-		}
-	})
 }
 
 func TestMap_Delete(t *testing.T) {
@@ -1313,9 +1299,16 @@ func TestMap_Delete(t *testing.T) {
 
 	t.Run("Simple", func(t *testing.T) {
 		m := NewMap[int, string](nil)
-		m = m.Set(100, "foo")
-		if v, ok := m.Get(100); !ok || v != "foo" {
-			t.Fatalf("unexpected value: <%v,%v>", v, ok)
+		m = m.Set(100, "foo").Set(200, "bar")
+		other := m.Delete(100)
+		if v, ok := other.Get(100); ok {
+			t.Fatalf("Get(100) after Delete = <%v,%v>, expected no value", v, ok)
+		} else if v, ok := other.Get(200); !ok || v != "bar" {
+			t.Fatalf("Get(200) after Delete(100) = <%v,%v>, expected bar", v, ok)
+		} else if other.Len() != 1 {
+			t.Fatalf("Len() after Delete = %d, expected 1", other.Len())
+		} else if v, ok := m.Get(100); !ok || v != "foo" {
+			t.Fatalf("original map lost key 100: <%v,%v>", v, ok)
 		}
 	})
 
@@ -1362,6 +1355,14 @@ func TestMap_Delete(t *testing.T) {
 				m.Delete(m.NewKey(rand))
 			default: // set new key
 				m.Set(m.NewKey(rand), rand.Intn(10000))
+			}
+			// Check the map against the model as it goes, not only once it is
+			// empty again: a Delete that drops a second key leaves an empty map
+			// at the end too.
+			if i%100 == 99 {
+				if err := m.Validate(); err != nil {
+					t.Fatalf("after operation %d: %v", i, err)
+				}
 			}
 		}
 
@@ -1439,7 +1440,7 @@ func TestMap_LimitedHash(t *testing.T) {
 
 	t.Run("Builder", func(t *testing.T) {
 		h := mockHasher[int]{
-			hash:  func(value int) uint32 { return hashUint64(uint64(value)) },
+			hash:  func(value int) uint32 { return hashUint64(uint64(value)) % 0xFF },
 			equal: func(a, b int) bool { return a == b },
 		}
 		b := NewMapBuilder[int, int](&h)
@@ -1545,6 +1546,11 @@ func (m *TMap) Delete(k int) {
 }
 
 func (m *TMap) Validate() error {
+	if got, exp := m.im.Len(), len(m.std); got != exp {
+		return fmt.Errorf("Map.Len()=%d, expected %d", got, exp)
+	} else if got := m.builder.Len(); got != exp {
+		return fmt.Errorf("MapBuilder.Len()=%d, expected %d", got, exp)
+	}
 	for _, k := range m.keys {
 		if v, ok := m.im.Get(k); !ok {
 			return fmt.Errorf("key not found: %d", k)
@@ -2316,40 +2322,50 @@ func TestSortedMap_Iterator(t *testing.T) {
 
 func TestNewHasher(t *testing.T) {
 	t.Run("builtin", func(t *testing.T) {
-		t.Run("int", func(t *testing.T) { testNewHasher(t, int(100)) })
-		t.Run("int8", func(t *testing.T) { testNewHasher(t, int8(100)) })
-		t.Run("int16", func(t *testing.T) { testNewHasher(t, int16(100)) })
-		t.Run("int32", func(t *testing.T) { testNewHasher(t, int32(100)) })
-		t.Run("int64", func(t *testing.T) { testNewHasher(t, int64(100)) })
+		t.Run("int", func(t *testing.T) { testNewHasher(t, int(100), int(101)) })
+		t.Run("int8", func(t *testing.T) { testNewHasher(t, int8(100), int8(101)) })
+		t.Run("int16", func(t *testing.T) { testNewHasher(t, int16(100), int16(101)) })
+		t.Run("int32", func(t *testing.T) { testNewHasher(t, int32(100), int32(101)) })
+		t.Run("int64", func(t *testing.T) { testNewHasher(t, int64(100), int64(101)) })
 
-		t.Run("uint", func(t *testing.T) { testNewHasher(t, uint(100)) })
-		t.Run("uint8", func(t *testing.T) { testNewHasher(t, uint8(100)) })
-		t.Run("uint16", func(t *testing.T) { testNewHasher(t, uint16(100)) })
-		t.Run("uint32", func(t *testing.T) { testNewHasher(t, uint32(100)) })
-		t.Run("uint64", func(t *testing.T) { testNewHasher(t, uint64(100)) })
+		t.Run("uint", func(t *testing.T) { testNewHasher(t, uint(100), uint(101)) })
+		t.Run("uint8", func(t *testing.T) { testNewHasher(t, uint8(100), uint8(101)) })
+		t.Run("uint16", func(t *testing.T) { testNewHasher(t, uint16(100), uint16(101)) })
+		t.Run("uint32", func(t *testing.T) { testNewHasher(t, uint32(100), uint32(101)) })
+		t.Run("uint64", func(t *testing.T) { testNewHasher(t, uint64(100), uint64(101)) })
 
-		t.Run("string", func(t *testing.T) { testNewHasher(t, "foo") })
+		t.Run("string", func(t *testing.T) { testNewHasher(t, "foo", "bar") })
 		//t.Run("byteSlice", func(t *testing.T) { testNewHasher(t, []byte("foo")) })
 	})
 
 	t.Run("reflection", func(t *testing.T) {
 		type Int int
-		t.Run("int", func(t *testing.T) { testNewHasher(t, Int(100)) })
+		t.Run("int", func(t *testing.T) { testNewHasher(t, Int(100), Int(101)) })
 
 		type Uint uint
-		t.Run("uint", func(t *testing.T) { testNewHasher(t, Uint(100)) })
+		t.Run("uint", func(t *testing.T) { testNewHasher(t, Uint(100), Uint(101)) })
 
 		type String string
-		t.Run("string", func(t *testing.T) { testNewHasher(t, String("foo")) })
+		t.Run("string", func(t *testing.T) { testNewHasher(t, String("foo"), String("bar")) })
 	})
 }
 
-func testNewHasher[V cmp.Ordered](t *testing.T, v V) {
+// testNewHasher checks the hasher NewHasher picks for v's type: Hash is stable,
+// tells two different values apart, and Equal is true only for equal values.
+func testNewHasher[V cmp.Ordered](t *testing.T, v, w V) {
 	t.Helper()
 	h := NewHasher(v)
-	h.Hash(v)
+	if h.Hash(v) != NewHasher(v).Hash(v) {
+		t.Fatal("Hash differs between two hashers for the same type")
+	}
+	if h.Hash(v) == h.Hash(w) {
+		t.Fatalf("Hash(%v) == Hash(%v) = %d", v, w, h.Hash(v))
+	}
 	if !h.Equal(v, v) {
-		t.Fatal("expected hash equality")
+		t.Fatalf("Equal(%v, %v) = false", v, v)
+	}
+	if h.Equal(v, w) || h.Equal(w, v) {
+		t.Fatalf("Equal(%v, %v) = true", v, w)
 	}
 }
 

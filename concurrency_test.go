@@ -74,28 +74,30 @@ func TestList_CopyOnWriteIsolation(t *testing.T) {
 	}
 	l2 := l1.Set(0, 9999)
 
+	// Several readers share each list, so a read that writes shared state races.
 	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10000; i++ {
-			if v := l1.Get(0); v != 0 {
-				t.Errorf("l1 expected index 0 => 0, got %v", v)
-				return
+	wg.Add(4)
+	for r := 0; r < 2; r++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				if v := l1.Get(0); v != 0 {
+					t.Errorf("l1 expected index 0 => 0, got %v", v)
+					return
+				}
 			}
-		}
-	}()
+		}()
 
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10000; i++ {
-			if v := l2.Get(0); v != 9999 {
-				t.Errorf("l2 expected index 0 => 9999, got %v", v)
-				return
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				if v := l2.Get(0); v != 9999 {
+					t.Errorf("l2 expected index 0 => 9999, got %v", v)
+					return
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	wg.Wait()
 }

@@ -217,16 +217,13 @@ func TestStreamingListBuilder(t *testing.T) {
 		builder.Filter(values, func(x int) bool { return x%2 == 0 })
 		list := builder.List()
 
-		expectedLen := 5 // 2, 4, 6, 8, 10
-		if list.Len() != expectedLen {
-			t.Errorf("Expected length %d, got %d", expectedLen, list.Len())
+		want := []int{2, 4, 6, 8, 10}
+		got := make([]int, list.Len())
+		for i := range got {
+			got[i] = list.Get(i)
 		}
-
-		// Verify all values are even
-		for i := 0; i < list.Len(); i++ {
-			if value := list.Get(i); value%2 != 0 {
-				t.Errorf("Expected even number, got %d", value)
-			}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("Filter gave %v, want %v (accepted values in input order)", got, want)
 		}
 	})
 
@@ -602,6 +599,16 @@ func requireListEquals(t testing.TB, l *List[int], want []int) {
 // TestBatchListBuilder_Lifecycle covers the states of the builder: valid,
 // invalid after List, valid again after Reset.
 func TestBatchListBuilder_Lifecycle(t *testing.T) {
+	t.Run("NonPositiveSizeHint", func(t *testing.T) {
+		for _, n := range []int{0, -1, -64, -1 << 20} {
+			b := NewBatchListBuilder[int](n)
+			b.Append(1)
+			if l := b.List(); l.Len() != 1 || l.Get(0) != 1 {
+				t.Fatalf("NewBatchListBuilder(%d): list %v", n, l)
+			}
+		}
+	})
+
 	t.Run("InvalidAfterList", func(t *testing.T) {
 		b := NewBatchListBuilder[int](0)
 		b.Append(1)

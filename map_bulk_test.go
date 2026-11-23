@@ -623,6 +623,22 @@ func TestBatchMapBuilderLifecycle(t *testing.T) {
 		requireMapEquals(t, m, map[int]int{7: 70}) // the first map is not affected
 	})
 
+	t.Run("ResetKeepsHasher", func(t *testing.T) {
+		b := NewBatchMapBuilder[string, int](foldHasher{}, 0)
+		b.Set("a", 1)
+		_ = b.Map()
+		b.Reset()
+		b.Set("x", 1)
+		b.Set("X", 2)
+		m := b.Map()
+		if m.Len() != 1 {
+			t.Fatalf("Len() = %d, want 1: the hasher given to the constructor treats x and X as one key after Reset", m.Len())
+		}
+		if v, ok := m.Get("x"); !ok || v != 2 {
+			t.Fatalf("Get(x) = %d, %v; want 2, true", v, ok)
+		}
+	})
+
 	t.Run("EmptyMapIsUsable", func(t *testing.T) {
 		m := NewBatchMapBuilder[int, int](nil, 0).Map()
 		if m.Len() != 0 {
