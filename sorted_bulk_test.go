@@ -587,15 +587,15 @@ func TestSortedBatchBuilderLifecycle(t *testing.T) {
 	})
 
 	t.Run("ResetKeepsComparer", func(t *testing.T) {
-		b := NewSortedBatchBuilder[int, int](nil, 0)
+		b := NewSortedBatchBuilder[int, int](reverseInts{}, 0)
 		b.Set(1, 1)
 		_ = b.SortedMap()
 		b.Reset()
-		b.Set(3, 3)
 		b.Set(2, 2)
+		b.Set(3, 3)
 		gk, _ := entriesOf(b.SortedMap())
-		if !slices.Equal(gk, []int{2, 3}) {
-			t.Errorf("keys %v, want [2 3]", gk)
+		if !slices.Equal(gk, []int{3, 2}) {
+			t.Errorf("keys %v, want [3 2] (reverse comparer kept across Reset)", gk)
 		}
 	})
 

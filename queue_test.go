@@ -67,10 +67,11 @@ func TestQueueNormalizeBoundary(t *testing.T) {
 		q = q.Enqueue(i)
 	}
 	for i := 0; i < 5; i++ {
+		var v int
 		var ok bool
-		q, _, ok = q.Dequeue()
-		if !ok {
-			t.Fatalf("unexpected empty during drain at %d", i)
+		q, v, ok = q.Dequeue()
+		if !ok || v != i {
+			t.Fatalf("Dequeue %d = %d, %v; want %d, true", i, v, ok, i)
 		}
 	}
 	if !q.Empty() {
